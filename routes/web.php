@@ -26,6 +26,7 @@ use App\Http\Controllers\Bar\BarUserController;
 use App\Http\Controllers\Bar\BarCompanyController;
 use App\Http\Controllers\Bar\BarReportController;
 use App\Http\Controllers\Bar\BarOrderController;
+use App\Http\Controllers\WhatsAppController;
 
 // 🏠 ROTA RAIZ
 Route::get('/', function () {
@@ -337,6 +338,13 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
+
+// -----------------------------------------------------------------------------------
+// ROTAS DA AUTOMAÇÃO- WHATSAPP E CHATGPT
+// -----------------------------------------------------------------------------------
+Route::post('/whatsapp/webhook', [WhatsAppController::class, 'handle']);
+
+
 
 // Rota Ajax de Autorização (VERSÃO BLINDADA - Não desloga o colaborador)
 Route::post('/admin/autorizar-acao', function (Illuminate\Http\Request $request) {
