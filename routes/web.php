@@ -339,12 +339,6 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// -----------------------------------------------------------------------------------
-// ROTAS DA AUTOMAÇÃO- WHATSAPP E CHATGPT
-// -----------------------------------------------------------------------------------
-Route::post('/whatsapp/webhook', [WhatsAppController::class, 'handle']);
-
-
 
 // Rota Ajax de Autorização (VERSÃO BLINDADA - Não desloga o colaborador)
 Route::post('/admin/autorizar-acao', function (Illuminate\Http\Request $request) {
