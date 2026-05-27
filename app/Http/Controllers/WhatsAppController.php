@@ -10,40 +10,52 @@ class WhatsAppController extends Controller
 {
     public function handleWebhook(Request $request)
     {
+        // 1. VALIDAÇÃO DO WEBHOOK (Exigido pela Meta - Método GET)
+        if ($request->isMethod('get')) {
+            $mode = $request->query('hub_mode');
+            $token = $request->query('hub_verify_token');
+            $challenge = $request->query('hub_challenge');
+
+            if ($mode === 'subscribe' && $token === env('WHATSAPP_VERIFY_TOKEN')) {
+                Log::info('Webhook da Meta validado com sucesso na VPS!');
+                return response($challenge, 200)->header('Content-Type', 'text/plain');
+            }
+
+            return response('Token de verificação inválido', 403);
+        }
+
+        // 2. RECEPÇÃO DE MENSAGENS REAL (Método POST)
         $payload = $request->all();
+        Log::info('Webhook Meta WhatsApp Recebido:', $payload);
 
-        // Logamos o payload completo para podermos debugar o formato exato da Evolution v1.8.4
-        Log::info('Webhook WhatsApp Recebido:', $payload);
+        // Estrutura de leitura de mensagens da API Oficial da Meta
+        if (isset($payload['entry'][0]['changes'][0]['value']['messages'][0])) {
+            $messageData = $payload['entry'][0]['changes'][0]['value']['messages'][0];
+            
+            $phoneContact = $messageData['from'] ?? null; // Número do cliente
+            $messageId = $messageData['id'] ?? null;
+            $messageType = $messageData['type'] ?? null;
 
-        // Verifica se o evento recebido é de uma mensagem enviada/recebida
-        if (isset($payload['event']) && $payload['event'] === 'messages.upsert') {
-            $data = $payload['data'] ?? [];
-            $key = $data['key'] ?? [];
+            // Captura o texto se for uma mensagem do tipo texto
+            $messageText = null;
+            if ($messageType === 'text') {
+                $messageText = $messageData['text']['body'] ?? null;
+            }
 
-            $remoteJid = $key['remoteJid'] ?? null;
-            $fromMe = $key['fromMe'] ?? false;
-
-            // Captura o texto da mensagem (pode vir direto ou dentro de uma message de contexto)
-            $messageText = $data['message']['conversation'] ??
-                ($data['message']['extendedTextMessage']['text'] ?? null);
-
-            if ($remoteJid && $messageText) {
-                // Salva a mensagem no banco local para construir o histórico (Memória da IA)
+            if ($phoneContact && $messageText) {
+                // Salva a mensagem no banco local para o histórico da IA
                 WhatsAppMessage::create([
-                    'remote_jid' => $remoteJid,
+                    'remote_jid' => $phoneContact . '@s.whatsapp.net', // Padronizando o formato do JID
                     'message' => $messageText,
-                    'from_me' => $fromMe
+                    'from_me' => false // Se entrou aqui no webhook da Meta, sempre veio do cliente
                 ]);
 
-                // Se a mensagem veio do cliente, futuramente dispararemos a IA aqui!
-                if (!$fromMe) {
-                    Log::info("Mensagem salva do cliente {$remoteJid}: {$messageText}");
+                Log::info("Mensagem da Meta salva do cliente {$phoneContact}: {$messageText}");
 
-                    // TODO: Chamar o OpenAIService passando o histórico
-                }
+                // TODO: Chamar o OpenAIService passando o histórico para responder o cliente aqui!
             }
         }
 
-        return response()->json(['status' => 'SUCCESS']);
+        return response('EVENT_RECEIVED', 200);
     }
 }
