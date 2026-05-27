@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # Servidor Web (Nginx) - Trata as requisições HTTPS/HTTP e passa para o PHP
+  webserver:
+    image: nginx:alpine
+    container_name: arena_webserver
+    restart: always
+    ports:
+      - '80:80'
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx:/etc/nginx/conf.d
+    networks:
+      - arena-network
+
+  # Motor do PHP (PHP-FPM) - Executa o código Laravel puro com máxima performance
+  app:
+    build:
+      context: .
+      dockerfile: docker/php.dockerfile
+    container_name: arena_app
+    restart: always
+    volumes:
+      - ./:/var/www
+    networks:
+      - arena-network
+
+  # Banco de Dados (MySQL)
+  db:
+    image: mysql:8.0
+    container_name: arena_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: arena_db
+      MYSQL_ROOT_PASSWORD: F@spmpa2600Tec
+    ports:
+      - '3306:3306'
+    volumes:
+      - arena-db-data:/var/lib/mysql
+    networks:
+      - arena-network
+
+networks:
+  arena-network:
+    driver: bridge
+
+volumes:
+  arena-db-data:
+    driver: local
