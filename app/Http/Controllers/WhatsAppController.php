@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Models\WhatsappMessage; // <-- Corrigido para 'a' minúsculo, combinando com o Model
+use App\Models\WhatsappMessage;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\WhatsappController;
 
-class WhatsAppController extends Controller
+class WhatsappController extends Controller
 {
     public function handleWebhook(Request $request)
     {
