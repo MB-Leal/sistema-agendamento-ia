@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Models\WhatsAppMessage;
+use App\Models\WhatsappMessage; // <-- Corrigido para 'a' minúsculo, combinando com o Model
 
 class WhatsAppController extends Controller
 {
@@ -33,7 +33,6 @@ class WhatsAppController extends Controller
             $messageData = $payload['entry'][0]['changes'][0]['value']['messages'][0];
             
             $phoneContact = $messageData['from'] ?? null; // Número do cliente
-            $messageId = $messageData['id'] ?? null;
             $messageType = $messageData['type'] ?? null;
 
             // Captura o texto se for uma mensagem do tipo texto
@@ -43,16 +42,14 @@ class WhatsAppController extends Controller
             }
 
             if ($phoneContact && $messageText) {
-                // Salva a mensagem no banco local para o histórico da IA
-                WhatsAppMessage::create([
-                    'remote_jid' => $phoneContact . '@s.whatsapp.net', // Padronizando o formato do JID
+                // Salva a mensagem no banco local usando o nome correto do Model
+                WhatsappMessage::create([
+                    'remote_jid' => $phoneContact . '@s.whatsapp.net', 
                     'message' => $messageText,
-                    'from_me' => false // Se entrou aqui no webhook da Meta, sempre veio do cliente
+                    'from_me' => false 
                 ]);
 
                 Log::info("Mensagem da Meta salva do cliente {$phoneContact}: {$messageText}");
-
-                // TODO: Chamar o OpenAIService passando o histórico para responder o cliente aqui!
             }
         }
 
