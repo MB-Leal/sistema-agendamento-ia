@@ -10,19 +10,8 @@ use App\Services\OpenAIService;
 
 class WhatsAppController extends Controller
 {
-
     protected $whatsAppService;
     protected $openAIService;
-    
-    // LOG BRUTO: Registra absolutamente qualquer requisição POST que bater aqui
-    if ($request->isMethod('post')) {
-        Log::info('Webhook recebido da Meta! Payload bruto: ' . json_serialize($request->all()));
-    }
-
-    // 1. VALIDAÇÃO DO WEBHOOK (GET)
-    if ($request->isMethod('get')) {
-        // ... seu código de validação atual
-    }
 
     // O Laravel injeta os dois serviços automaticamente aqui
     public function __construct(WhatsAppService $whatsAppService, OpenAIService $openAIService)
@@ -33,7 +22,12 @@ class WhatsAppController extends Controller
 
     public function handleWebhook(Request $request)
     {
-        // 1. VALIDAÇÃO DO WEBHOOK (Exigido pela Meta)
+        // 🚨 LOG BRUTO CORRIGIDO: Agora posicionado corretamente dentro do método handleWebhook
+        if ($request->isMethod('post')) {
+            Log::info('Webhook recebido da Meta! Payload bruto: ' . json_encode($request->all()));
+        }
+
+        // 1. VALIDAÇÃO DO WEBHOOK (Exigido pela Meta no momento da configuração)
         if ($request->isMethod('get')) {
             $mode = $request->query('hub_mode');
             $token = $request->query('hub_verify_token');
@@ -47,13 +41,13 @@ class WhatsAppController extends Controller
             return response('Token de verificação inválido', 403);
         }
 
-        // 2. RECEPÇÃO DE MENSAGENS E PROCESSAMENTO DA IA
+        // 2. RECEPÇÃO DE MENSAGENS E PROCESSAMENTO DA IA (POST)
         $payload = $request->all();
 
         if (isset($payload['entry'][0]['changes'][0]['value']['messages'][0])) {
             $messageData = $payload['entry'][0]['changes'][0]['value']['messages'][0];
             
-            $phoneContact = $messageData['from'] ?? null; // Ex: 5511999999999
+            $phoneContact = $messageData['from'] ?? null; // Ex: 559181490019
             $messageType = $messageData['type'] ?? null;
 
             // Tratamos apenas mensagens do tipo texto enviadas pelo cliente
@@ -61,32 +55,41 @@ class WhatsAppController extends Controller
                 $messageText = $messageData['text']['body'] ?? null;
 
                 if ($phoneContact && $messageText) {
-                    Log::info("Mensagem recebida do cliente {$phoneContact}: {$messageText}");
+                    Log::info("Processando mensagem do cliente: {$phoneContact} - Texto: {$messageText}");
 
-                    // A) Salva a mensagem de entrada no banco local (Histórico)
-                    WhatsappMessage::create([
-                        'remote_jid' => $phoneContact . '@s.whatsapp.net',
-                        'message' => $messageText,
-                        'from_me' => false
-                    ]);
-
+                    // A) Salva a mensagem de entrada no banco local (Histórico) - Isolado em try/catch
                     try {
-                        // B) Chama o cérebro da Inteligência Artificial (OpenAI) passando o texto
+                        WhatsappMessage::create([
+                            'remote_jid' => $phoneContact . '@s.whatsapp.net',
+                            'message' => $messageText,
+                            'from_me' => false
+                        ]);
+                    } catch (\Exception $dbEx) {
+                        Log::error("Erro ao salvar mensagem de entrada no banco: " . $dbEx->getMessage());
+                    }
+
+                    // B) Fluxo Inteligente da IA e resposta ao cliente
+                    try {
+                        // Chama o cérebro da Inteligência Artificial (OpenAI) passando o texto
                         $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText);
 
                         if ($aiResponse) {
-                            // C) Salva a resposta gerada pela IA no banco local como "enviada por mim"
-                            WhatsappMessage::create([
-                                'remote_jid' => $phoneContact . '@s.whatsapp.net',
-                                'message' => $aiResponse,
-                                'from_me' => true
-                            ]);
-
-                            // D) Envia fisicamente a mensagem da IA de volta para o WhatsApp do cliente
+                            // Envia fisicamente a mensagem da IA de volta para o WhatsApp do cliente
                             $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
+
+                            // Salva a resposta gerada pela IA no banco local como "enviada por mim"
+                            try {
+                                WhatsappMessage::create([
+                                    'remote_jid' => $phoneContact . '@s.whatsapp.net',
+                                    'message' => $aiResponse,
+                                    'from_me' => true
+                                ]);
+                            } catch (\Exception $dbEx2) {
+                                Log::warning("Não salvou resposta no banco, mas enviou com sucesso: " . $dbEx2->getMessage());
+                            }
                         }
                     } catch (\Exception $e) {
-                        Log::error("Erro no processamento da OpenAI ou Envio: " . $e->getMessage());
+                        Log::error("Erro fatal no processamento da OpenAI ou Envio: " . $e->getMessage());
                     }
                 }
             }
