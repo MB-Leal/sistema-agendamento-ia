@@ -10,8 +10,19 @@ use App\Services\OpenAIService;
 
 class WhatsAppController extends Controller
 {
+
     protected $whatsAppService;
     protected $openAIService;
+    
+    // LOG BRUTO: Registra absolutamente qualquer requisição POST que bater aqui
+    if ($request->isMethod('post')) {
+        Log::info('Webhook recebido da Meta! Payload bruto: ' . json_serialize($request->all()));
+    }
+
+    // 1. VALIDAÇÃO DO WEBHOOK (GET)
+    if ($request->isMethod('get')) {
+        // ... seu código de validação atual
+    }
 
     // O Laravel injeta os dois serviços automaticamente aqui
     public function __construct(WhatsAppService $whatsAppService, OpenAIService $openAIService)
