@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Models\WhatsappMessage;
+use App\Models\WhatsAppMessage;
 use App\Services\WhatsAppService;
 use App\Services\OpenAIService;
 
@@ -59,7 +59,7 @@ class WhatsAppController extends Controller
 
                     // A) Salva a mensagem de entrada no banco local (Histórico) - Isolado em try/catch
                     try {
-                        WhatsappMessage::create([
+                        WhatsAppMessage::create([
                             'remote_jid' => $phoneContact . '@s.whatsapp.net',
                             'message' => $messageText,
                             'from_me' => false
