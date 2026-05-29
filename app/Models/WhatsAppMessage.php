@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class WhatsappMessage extends Model
+class WhatsAppMessage extends Model
 {
     protected $fillable = ['remote_jid', 'message', 'from_me'];
 }
