@@ -63,7 +63,7 @@ class WhatsAppController extends Controller
                             'remote_jid' => $phoneContact . '@s.whatsapp.net',
                             'message' => $messageText,
                             'from_me' => false,
-                            'timestamp' => time()
+                            'timestamp' => now()
                         ]);
                     } catch (\Exception $dbEx) {
                         Log::error("Erro ao salvar mensagem de entrada no banco: " . $dbEx->getMessage());
@@ -84,7 +84,7 @@ class WhatsAppController extends Controller
                                     'remote_jid' => $phoneContact . '@s.whatsapp.net',
                                     'message' => $aiResponse,
                                     'from_me' => true,
-                                    'timestamp' => time()
+                                    'timestamp' => now()
                                 ]);
                             } catch (\Exception $dbEx2) {
                                 Log::warning("Não salvou resposta no banco, mas enviou com sucesso: " . $dbEx2->getMessage());
