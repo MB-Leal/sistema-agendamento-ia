@@ -12,9 +12,5 @@ class WhatsAppMessage extends Model
     // 💡 IMPORTANTE: Força o Laravel a usar o nome correto da tabela no MySQL
     protected $table = 'whatsapp_messages';
 
-    protected $fillable = [
-        'remote_jid', 
-        'message', 
-        'from_me'
-    ];
+    protected $fillable = ['remote_jid', 'message', 'from_me', 'timestamp'];
 }
