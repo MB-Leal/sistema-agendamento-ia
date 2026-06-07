@@ -25,6 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'gestor' => \App\Http\Middleware\IsGestor::class,
             'role'   => \App\Http\Middleware\CheckRole::class, // ✅ Adicionado para resolver o erro 500
         ]);
+        // 💬 EXCEÇÃO DO CSRF PARA AUTOMAÇÃO DO WHATSAPP
+        // Substitua pelo path exato da rota que receberá os dados da API
+        $middleware->validateCsrfTokens(except: [
+            'webhook/whatsapp', 
+            'api/webhook/whatsapp',
+        ]);
 
     })
     ->withExceptions(function (Exceptions $exceptions) {
