@@ -359,4 +359,7 @@ Route::post('/admin/autorizar-acao', function (Illuminate\Http\Request $request)
     return response()->json(['success' => false, 'message' => 'Credenciais de supervisor inválidas.'], 401);
 })->middleware('auth')->name('admin.autorizar_acao');
 
+// Rota unificada para o Webhook da Meta
+Route::match(['get', 'post'], '/api/whatsapp/webhook', [App\Http\Controllers\WhatsAppController::class, 'handleWebhook']);
+
 require __DIR__ . '/auth.php';

@@ -10,7 +10,7 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 // Rota oficial para o Webhook da Meta (Garantindo o WhatsAppController)
-Route::match(['get', 'post'], '/whatsapp/webhook', [WhatsAppController::class, 'handleWebhook']);
+//Route::match(['get', 'post'], '/whatsapp/webhook', [WhatsAppController::class, 'handleWebhook']);
 
 Route::get('/whatsapp/teste-envio', function(WhatsAppService $ws) {
     // Vamos testar o envio direto usando o mesmo número do log da Meta
