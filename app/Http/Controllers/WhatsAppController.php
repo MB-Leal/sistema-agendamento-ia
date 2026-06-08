@@ -7,22 +7,28 @@ use Illuminate\Support\Facades\Log;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsAppService;
 use App\Services\OpenAIService;
+use App\Services\MercadoPagoService; // 🚀 Importado a nova Service Nativa
 
 class WhatsAppController extends Controller
 {
     protected $whatsAppService;
     protected $openAIService;
+    protected $mercadoPagoService; // 🚀 Adicionado propriedade
 
-    // O Laravel injeta os dois serviços automaticamente aqui
-    public function __construct(WhatsAppService $whatsAppService, OpenAIService $openAIService)
-    {
+    // O Laravel injeta os três serviços automaticamente aqui no construtor
+    public function __construct(
+        WhatsAppService $whatsAppService, 
+        OpenAIService $openAIService,
+        MercadoPagoService $mercadoPagoService
+    ) {
         $this->whatsAppService = $whatsAppService;
         $this->openAIService = $openAIService;
+        $this->mercadoPagoService = $mercadoPagoService;
     }
 
     public function handleWebhook(Request $request)
     {
-        // 🚨 LOG BRUTO CORRIGIDO: Agora posicionado corretamente dentro do método handleWebhook
+        // LOG BRUTO CORRIGIDO: Posicionado corretamente dentro do método handleWebhook
         if ($request->isMethod('post')) {
             Log::info('Webhook recebido da Meta! Payload bruto: ' . json_encode($request->all()));
         }
@@ -49,6 +55,7 @@ class WhatsAppController extends Controller
             
             $phoneContact = $messageData['from'] ?? null; // Ex: 559181490019
             $messageType = $messageData['type'] ?? null;
+            $customerName = $payload['entry'][0]['changes'][0]['value']['contacts'][0]['profile']['name'] ?? 'Cliente';
 
             // Tratamos apenas mensagens do tipo texto enviadas pelo cliente
             if ($messageType === 'text') {
@@ -75,12 +82,48 @@ class WhatsAppController extends Controller
                         $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText);
 
                         if ($aiResponse) {
-                            // Envia fisicamente a mensagem da IA de volta para o WhatsApp do cliente
+                            
+                            // 🎯 ENGENHARIA DE INTERCEPÇÃO DO PIX
+                            // Procura o padrão [GERAR_PIX:VALOR] no texto gerado pela OpenAI
+                            if (preg_match('/\[GERAR_PIX:([0-9.]+)\]/', $aiResponse, $matches)) {
+                                $valorPix = $matches[1]; // Extrai o valor dinamicamente (Ex: 50.00)
+                                
+                                Log::info("IA solicitou geração de PIX no valor de R$ {$valorPix} para o cliente {$phoneContact}");
+
+                                // Aciona a nossa service do Mercado Pago passando os dados coletados do Webhook
+                                $pixData = $this->mercadoPagoService->criarPix(
+                                    $valorPix, 
+                                    "Sinal de Reserva - Arena Elizeu", 
+                                    $customerName, 
+                                    $phoneContact
+                                );
+
+                                if ($pixData && isset($pixData['copia_e_cola'])) {
+                                    // Removemos a tag técnica invisível do texto para não ficar feio pro usuário
+                                    $aiResponse = preg_replace('/\[GERAR_PIX:([0-9.]+)\]/', '', $aiResponse);
+                                    
+                                    // Monta o complemento da mensagem com instruções claras de Copia e Cola
+                                    $complementoPix = "\n\n🔑 *Aqui está o seu PIX Copia e Cola:*\n\n" . $pixData['copia_e_cola'] . "\n\n_Copie o código acima e cole no aplicativo do seu banco para realizar o pagamento do sinal._";
+                                    
+                                    // Junta o texto simpático da IA com o código real do PIX
+                                    $aiResponse .= $complementoPix;
+
+                                    Log::info("PIX gerado com sucesso ID: " . $pixData['payment_id'] . ". Anexado ao fluxo do WhatsApp.");
+                                    
+                                    // TODO: Salvar o $pixData['payment_id'] atrelado à tabela de agendamentos temporários do banco para validar o webhook de baixa depois.
+                                } else {
+                                    // Fallback caso a API do Mercado Pago caia ou o token expire
+                                    $aiResponse = preg_replace('/\[GERAR_PIX:([0-9.]+)\]/', '', $aiResponse);
+                                    $aiResponse .= "\n\nDesculpe-me, tive um pequeno problema técnico ao gerar o seu código PIX agora. Por favor, tente novamente em um minuto ou solicite a chave PIX direta para um de nossos atendentes humana.";
+                                }
+                            }
+
+                            // Envia fisicamente a mensagem da IA (com ou sem PIX) de volta para o WhatsApp
                             $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
 
                             // Salva a resposta gerada pela IA no banco local como "enviada por mim"
                             try {
-                                WhatsappMessage::create([
+                                WhatsAppMessage::create([
                                     'remote_jid' => $phoneContact . '@s.whatsapp.net',
                                     'message' => $aiResponse,
                                     'from_me' => true,
