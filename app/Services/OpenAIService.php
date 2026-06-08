@@ -20,6 +20,9 @@ class OpenAIService
     /**
      * Gera a resposta da IA baseada na mensagem atual e no histórico do banco local
      */
+    /**
+     * Gera a resposta da IA baseada na mensagem atual e no histórico do banco local
+     */
     public function getAIResponse(string $phoneContact, string $customerMessage): string
     {
         if (empty($this->apiKey)) {
@@ -35,21 +38,23 @@ class OpenAIService
                         "2. Localização: Se o cliente perguntar onde fica ou pedir a localização, envie exatamente este link do Google Maps: https://maps.app.goo.gl/mEkWThR4gkot25RD6 \n" .
                         "3. Regra de Pagamento (Sinal): Explique de forma muito educada que, para garantir e confirmar a reserva do horário no sistema, é necessário realizar o pagamento de uma parte do valor como garantia (um sinal/adiantamento) no valor de R$ 50,00. Isso evita que o dono da arena tome prejuízos com cancelamentos.\n\n" .
                         "🎯 REGRA CRUCIAL DE INTEGRAÇÃO BANCÁRIA (MERCADO PAGO):\n" .
-                        "- No momento exato em que o cliente concordar com os termos e confirmar que deseja fazer o pagamento do sinal por PIX para fechar a reserva, você deve gerar uma mensagem final amigável dizendo que está gerando a cobrança e, OBRIGATORIAMENTE, incluir a tag técnica exata [GERAR_PIX:50.00] colada ao final do seu texto. O sistema interpretará essa tag e injetará o código Copia e Cola automaticamente. Nunca use essa tag antes da confirmação final do cliente.\n\n" .
+                        "- Quando o usuário que você está conversando confirmar explicitamente o Nome, o Dia, o Horário e disser que vai pagar no PIX, você deve aceitar e, OBRIGATORIAMENTE, colocar a tag exata [GERAR_PIX:50.00] colada ao final do seu texto. Não adicione espaços dentro dos colchetes. Exemplo: 'Perfeito! Estou gerando o código PIX de R$ 50,00 para você. [GERAR_PIX:50.00]'\n\n" .
                         "Regras de Conversação:\n" .
                         "- Escreva mensagens curtas e diretas (máximo 3 frases por resposta), ideais para o WhatsApp.\n" .
-                        "- Sempre pergunte o nome do cliente se ainda não souber.\n" .
-                        "- Para iniciar a verificação de um agendamento, você precisa saber apenas: Nome do cliente, o Dia desejado e o Horário.\n" .
+                        "- Se você não souber o nome do cliente atual baseado estritamente nas mensagens anteriores DELE, pergunte o nome.\n" .
                         "Hoje é dia " . date('d/m/Y') . ".";
 
-        // 2. RECUPERAÇÃO DA MEMÓRIA: Busca as últimas 6 mensagens trocadas com este cliente no banco de dados
+        // 2. RECUPERAÇÃO DA MEMÓRIA ISOLADA POR CLIENTE
         $historyMessages = [];
         try {
-            $rawLogs = WhatsAppMessage::where('remote_jid', $phoneContact . '@s.whatsapp.net')
-                ->orderBy('created_at', 'desc')
-                ->limit(6)
+            // 🛡️ CORREÇÃO CRUCIAL: Isolando rigidamente o JID do cliente atual para não misturar conversas
+            $targetJid = $phoneContact . '@s.whatsapp.net';
+
+            $rawLogs = WhatsAppMessage::where('remote_jid', $targetJid)
+                ->orderBy('id', 'desc') // Ordena por ID decrescente para pegar as últimas
+                ->limit(10) // Aumentamos para 10 para dar mais estabilidade à memória da IA
                 ->get()
-                ->reverse(); // Reverte para colocar na ordem cronológica correta (da mais antiga para a mais nova)
+                ->reverse(); // Coloca na ordem cronológica correta (antiga -> nova)
 
             foreach ($rawLogs as $log) {
                 $role = $log->from_me ? 'assistant' : 'user';
@@ -59,30 +64,28 @@ class OpenAIService
             Log::error("Erro ao recuperar histórico do banco para OpenAI: " . $e->getMessage());
         }
 
-        // 3. MONTAGEM DA ESTRUTURA DE COGNÇÃO (System Prompt + Histórico + Mensagem Atual)
+        // 3. MONTAGEM DA ESTRUTURA DE COGNIÇÃO
         $messagesPayload = [];
         $messagesPayload[] = ['role' => 'system', 'content' => $systemPrompt];
 
-        // Se houver histórico no banco, adiciona no meio do payload
         foreach ($historyMessages as $pastMessage) {
             $messagesPayload[] = $pastMessage;
         }
 
-        // Se o histórico estiver vazio ou não pegou a mensagem atual, garante que a última mensagem do cliente feche o array
-        // (Evita duplicar se o controller acabou de salvar no banco e já lemos acima)
+        // Garante que a mensagem atual do cliente feche o array se já não foi inclusa
         $lastSaved = end($historyMessages);
         if (!$lastSaved || $lastSaved['content'] !== $customerMessage) {
             $messagesPayload[] = ['role' => 'user', 'content' => $customerMessage];
         }
 
-        Log::info("Chamando OpenAI para o cliente {$phoneContact} com histórico de " . count($historyMessages) . " mensagens.");
+        Log::info("Chamando OpenAI isolada para o cliente {$phoneContact} com histórico de " . count($historyMessages) . " mensagens.");
 
         // 4. DISPARO PARA A API DA OPENAI
         $response = Http::withToken($this->apiKey)
             ->post($this->apiUrl, [
                 'model' => 'gpt-4o-mini',
                 'messages' => $messagesPayload,
-                'temperature' => 0.5 // Menor temperatura deixa a IA mais focada nas regras de negócio da Arena
+                'temperature' => 0.3 // Baixamos para 0.3 para ela ser mais exata e obedecer melhor as travas
             ]);
 
         if ($response->successful()) {
