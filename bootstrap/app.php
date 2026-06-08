@@ -28,8 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // 💬 EXCEÇÃO DO CSRF PARA AUTOMAÇÃO DO WHATSAPP
         // Substitua pelo path exato da rota que receberá os dados da API
         $middleware->validateCsrfTokens(except: [
-            'webhook/whatsapp', 
-            'api/webhook/whatsapp',
+            'api/whatsapp/webhook',
+            'whatsapp/webhook',
+            'api/whatsapp/*',
+            'whatsapp/*',
         ]);
 
     })
