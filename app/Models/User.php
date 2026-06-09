@@ -27,6 +27,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'no_show_count',
         'is_vip',
         'is_blocked',
+        'chat_human_mode',
         'customer_qualification',
         'arena_id', // Para vínculo multiquadra
     ];
@@ -47,6 +48,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'password' => 'hashed',
         'is_vip' => 'boolean',
         'is_blocked' => 'boolean',
+        'chat_human_mode' => 'boolean',
         'customer_qualification' => 'string',
     ];
 
