@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Services\WhatsAppService;
 use App\Http\Controllers\WhatsAppController;
+use App\Http\Controllers\WebhookMercadoPagoController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -17,3 +18,4 @@ Route::get('/whatsapp/teste-envio', function(WhatsAppService $ws) {
     $resultado = $ws->sendMessage('559181490019', 'Fala Marcos! Conexão direta da VPS funcionando!');
     return response()->json(['enviado' => $resultado]);
 });
+Route::post('/mercadopago/webhook', [WebhookMercadoPagoController::class, 'handle']);

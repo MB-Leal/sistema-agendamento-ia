@@ -108,13 +108,55 @@ class WhatsAppController extends Controller
                                     // Junta o texto simpático da IA com o código real do PIX
                                     $aiResponse .= $complementoPix;
 
-                                    Log::info("PIX gerado com sucesso ID: " . $pixData['payment_id'] . ". Anexado ao fluxo do WhatsApp.");
+                                    Log::info("PIX gerado com sucesso ID: " . $pixData['payment_id'] . ". Iniciando persistência da Reserva...");
                                     
-                                    // TODO: Salvar o $pixData['payment_id'] atrelado à tabela de agendamentos temporários do banco para validar o webhook de baixa depois.
+                                    // 🚀 GRAVAÇÃO DA PRÉ-RESERVA ADAPTADA AOS TEUS MODELS REAIS
+                                    try {
+                                        // Tentamos buscar o usuário de forma flexível pelas duas colunas possíveis
+                                        $usuario = \App\Models\User::where(function($query) use ($phoneContact) {
+                                            $query->where('phone_number', $phoneContact)
+                                                  ->orWhere('telefone', $phoneContact);
+                                        })->first();
+                                        
+                                        // Se o cliente for novo, cria seguindo a assinatura exata do fillable do teu Model
+                                        if (!$usuario) {
+                                            $usuario = \App\Models\User::create([
+                                                'name' => $customerName ?? 'Cliente WhatsApp',
+                                                'email' => $phoneContact . '@arenaelizeu.com.br',
+                                                'phone_number' => $phoneContact, // Atributo fillable do User.php
+                                                'telefone' => $phoneContact,     // Fallback para a coluna física
+                                                'password' => bcrypt(uniqid()),
+                                                'role' => 'customer',
+                                                'arena_id' => 1
+                                            ]);
+                                        }
+
+                                        // Define o próximo sábado como data padrão para os testes vigentes
+                                        $dataAgendamento = date('Y-m-d', strtotime('next saturday'));
+
+                                        // Cria a reserva respeitando os campos obrigatórios do teu Model Reserva.php
+                                        \App\Models\Reserva::create([
+                                            'user_id' => $usuario->id,
+                                            'arena_id' => 1,
+                                            'data_reserva' => $dataAgendamento,
+                                            'hora_inicio' => '14:00:00',
+                                            'hora_fim' => '15:00:00',
+                                            'total_price' => (float) $valorPix,
+                                            'status' => 'pending', // Campo status controlado pelo enum
+                                            'payment_id' => $pixData['payment_id'],
+                                            'payment_status' => 'pending'
+                                        ]);
+
+                                        Log::info("Pré-reserva 'pending' gravada com sucesso no banco para o Payment ID: " . $pixData['payment_id']);
+
+                                    } catch (\Exception $reservaEx) {
+                                        Log::error("Erro ao salvar a pré-reserva no banco de dados: " . $reservaEx->getMessage());
+                                    }
+
                                 } else {
                                     // Fallback caso a API do Mercado Pago caia ou o token expire
                                     $aiResponse = preg_replace('/\[GERAR_PIX:([0-9.]+)\]/', '', $aiResponse);
-                                    $aiResponse .= "\n\nDesculpe-me, tive um pequeno problema técnico ao gerar o seu código PIX agora. Por favor, tente novamente em um minuto ou solicite a chave PIX direta para um de nossos atendentes humana.";
+                                    $aiResponse .= "\n\nDesculpe-me, tive um pequeno problema técnico ao gerar o seu código PIX agora. Por favor, tente novamente em um minuto ou solicite a chave PIX direta para um de nossos atendentes humanos.";
                                 }
                             }
 
