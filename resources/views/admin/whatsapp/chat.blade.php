@@ -9,7 +9,7 @@
         
         <div class="flex h-[calc(100vh-320px)] min-h-[450px] bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             
-            <div class="w-1/3 min-w-[280px] max-w-[400px] border-r border-gray-200 flex flex-col h-full bg-white">
+            <div class="w-[320px] min-w-[260px] max-w-[350px] border-r border-gray-200 flex flex-col h-full bg-white shrink-0">
                 
                 <div class="p-3 bg-gray-50 border-b border-gray-200 shrink-0">
                     <form method="GET" action="{{ route('admin.whatsapp.chat') }}" id="form-connection">
@@ -81,7 +81,7 @@
                 </div>
             </div>
 
-            <div class="flex-1 flex flex-col h-full bg-[#efeae2] relative">
+            <div class="flex-1 flex flex-col h-full bg-[#efeae2] relative min-w-0">
                 @if($activeChat)
                     <div class="h-14 px-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between shrink-0 z-10">
                         <div class="flex items-center">
