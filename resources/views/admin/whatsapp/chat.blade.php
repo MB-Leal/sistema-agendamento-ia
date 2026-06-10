@@ -10,7 +10,7 @@
             
             <div class="flex h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 
-                <div class="w-1/3 border-r border-gray-200 flex flex-column h-full bg-white">
+                <div class="w-1/3 border-r border-gray-200 flex flex-col h-full bg-white">
                     
                     <div class="p-3 border-b border-gray-100 bg-gray-50">
                         <label class="text-gray-500 text-[10px] font-black uppercase tracking-wider mb-1.5 block">CONEXÃO ATIVA</label>
@@ -59,20 +59,20 @@
                                         @endif
 
                                         @if($hasUnread)
-                                            <span class="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full text-xxs font-bold bg-emerald-500 text-white">{{ $contact->unread_count }}</span>
+                                            <span class="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full text-[10px] font-bold bg-emerald-500 text-white">{{ $contact->unread_count }}</span>
                                         @endif
                                     </div>
                                 </div>
                             </a>
                         @empty
-                            <div class="p-4 text-center text-sm text-gray-400 italic">Nenhuma mensagem registrada.</div>
+                            <div class="p-4 text-center text-sm text-gray-400 italic">Nenhuma conversa registrada.</div>
                         @endforelse
                     </div>
                 </div>
 
                 <div class="flex-1 flex flex-col h-full bg-[#efeae2] relative">
                     @if($activeChat)
-                        <div class="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center z-10 shadow-xs">
+                        <div class="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center z-10 shadow-sm">
                             <div>
                                 <h6 class="mb-0 font-bold text-gray-800 text-sm">💬 {{ str_replace('@s.whatsapp.net', '', $activeChat) }}</h6>
                                 <small class="text-emerald-600 font-semibold text-xs">Atendimento ativo com o estabelecimento</small>
@@ -82,7 +82,7 @@
                         <div class="flex-1 p-4 overflow-y-auto flex flex-col gap-2.5 bg-whatsapp-pattern style-scrollbar" id="messagesBox">
                             @foreach($messages as $msg)
                                 <div class="w-full flex {{ $msg->from_me ? 'justify-end' : 'justify-start' }}">
-                                    <div class="p-2 rounded-lg shadow-xs max-w-xl relative break-words" 
+                                    <div class="p-2 rounded-lg shadow-sm max-w-xl relative break-words" 
                                          style="{{ $msg->from_me ? 'background-color: #d9fdd3; border-top-right-radius: 0;' : 'background-color: #ffffff; border-top-left-radius: 0;' }}">
                                         <p class="text-sm text-gray-900 leading-normal mb-1 whitespace-pre-wrap">{{ $msg->message }}</p>
                                         <div class="text-right text-gray-400 select-none" style="font-size: 9px;">
@@ -92,3 +92,64 @@
                                 </div>
                             @endforeach
                         </div>
+
+                        <div class="p-3 border-t border-gray-200 bg-gray-50 z-10">
+                            <form method="POST" action="{{ route('admin.whatsapp.send') }}" class="flex gap-2">
+                                @csrf
+                                <input type="hidden" name="remote_jid" value="{{ $activeChat }}">
+                                <input type="text" name="message" class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3" placeholder="Digite uma resposta manual para assumir o controle da conversa..." required autocomplete="off">
+                                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150">
+                                    Enviar 🚀
+                                </button>
+                            </form>
+                        </div>
+                    @else
+                        <div class="m-auto text-center p-6 flex flex-col items-center justify-center z-10">
+                            <div class="text-7xl mb-4 opacity-20 select-none">🏟️</div>
+                            <h5 class="text-gray-700 font-bold text-base mb-1">Central de Atendimento da Arena</h5>
+                            <p class="text-gray-500 text-xs max-w-xs leading-relaxed">Selecione uma conversa na lista lateral para monitorar o robô de IA ou responder o cliente diretamente.</p>
+                        </div>
+                    @endif
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mantém a rolagem sempre no final ao carregar as mensagens
+        const box = document.getElementById('messagesBox');
+        if(box) { box.scrollTop = box.scrollHeight; }
+
+        // Filtro de pesquisa em tempo real
+        document.getElementById('searchChat').addEventListener('input', function(e) {
+            const value = e.target.value.toLowerCase();
+            document.querySelectorAll('.contact-item').forEach(item => {
+                const name = item.getAttribute('data-name');
+                if(name.includes(value)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    </script>
+
+    <style>
+        .style-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+        .style-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.12); border-radius: 99px; }
+        .style-chat-name { max-width: calc(100% - 10px); }
+        
+        /* Textura geométrica sutil autoral simulando o fundo de marca d'água */
+        .bg-whatsapp-pattern {
+            background-color: #efeae2;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M9 24c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3-3-1.34-3-3zm30 0c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3-3-1.34-3-3zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zm30 0c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zM9 42c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3-3-1.34-3-3zm30 0c0-1.66 1.34-3 3-3s3 1.34 3 3-1.34 3-3 3-3-1.34-3-3z' fill='%23e5ddd5' fill-opacity='0.5' fill-rule='evenodd'/%3E%3C/svg%3E");
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(0.97); opacity: 0.85; }
+            50% { transform: scale(1.02); opacity: 1; }
+        }
+        .animate-pulse { animation: pulse 1.8s infinite ease-in-out; }
+    </style>
+</x-app-layout>
