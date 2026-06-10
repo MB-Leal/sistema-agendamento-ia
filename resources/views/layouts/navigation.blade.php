@@ -179,6 +179,9 @@
             <x-responsive-nav-link :href="route('admin.payment.index')" :active="request()->routeIs('admin.payment.*')">
                 {{ __('Caixa') }}
             </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('admin.whatsapp.chat'" :active="request()->routeIs('admin.payment.*')">
+                {{ __('Whatsapp') }}
+            </x-responsive-nav-link>
 
             {{-- 🛡️ TRAVA PARA COLABORADOR --}}
             @if(Auth::user()->is_admin || Auth::user()->is_gestor)

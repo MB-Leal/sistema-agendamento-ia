@@ -27,6 +27,7 @@ use App\Http\Controllers\Bar\BarCompanyController;
 use App\Http\Controllers\Bar\BarReportController;
 use App\Http\Controllers\Bar\BarOrderController;
 use App\Http\Controllers\WhatsAppController;
+use App\Http\Controllers\Admin\WhatsAppChatController;
 
 // 🏠 ROTA RAIZ
 Route::get('/', function () {
@@ -361,5 +362,12 @@ Route::post('/admin/autorizar-acao', function (Illuminate\Http\Request $request)
 
 // Rota unificada para o Webhook da Meta
 Route::match(['get', 'post'], '/api/whatsapp/webhook', [App\Http\Controllers\WhatsAppController::class, 'handleWebhook']);
+
+//Rotas do painel de conversas do whatsapp
+Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+    // Rotas do Chat do WhatsApp
+    Route::get('/whatsapp/chat', [WhatsAppChatController::class, 'index'])->name('whatsapp.chat');
+    Route::post('/whatsapp/send', [WhatsAppChatController::class, 'sendMessage'])->name('whatsapp.send');
+});
 
 require __DIR__ . '/auth.php';
