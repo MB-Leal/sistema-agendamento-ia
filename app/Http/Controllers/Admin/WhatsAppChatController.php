@@ -38,9 +38,8 @@ class WhatsAppChatController extends Controller
                 
                 // Busca se esse cliente específico está com o gatilho de [ATIVAR_HUMANO] ligado no User
                 $user = User::where('whatsapp_contact', $purePhone)
-            ->orWhere('whatsapp_contact', 'like', '%' . substr($purePhone, -8))
-            ->orWhere('telefone', $purePhone)
-            ->first();
+                            ->orWhere('whatsapp_contact', 'like', '%' . substr($purePhone, -8))
+                            ->first();
                 
                 $contact->is_human_mode = $user && isset($user->chat_human_mode) ? $user->chat_human_mode : false;
                 
