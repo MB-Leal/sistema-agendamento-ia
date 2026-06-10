@@ -43,6 +43,11 @@
                         {{ __('Caixa') }}
                     </x-nav-link>
 
+                    {{-- 🏟️ CENTRAL MULTI-ATENDIMENTO WHATSAPP WEB INTEGRADO (DESKTOP) --}}
+                    <x-nav-link :href="route('admin.whatsapp.chat')" :active="request()->routeIs('admin.whatsapp.*')" class="px-3 py-2 text-sm font-black text-emerald-600 hover:text-emerald-700">
+                        {{ __('🟢 WhatsApp') }}
+                    </x-nav-link>
+
                     {{-- 🛡️ TRAVA PARA COLABORADOR --}}
                     @if(Auth::user()->is_admin || Auth::user()->is_gestor)
                     <x-nav-link :href="route('admin.financeiro.dashboard')" :active="request()->routeIs('admin.financeiro.*')" class="px-3 py-2 text-sm font-semibold">
@@ -116,7 +121,7 @@
                         </x-dropdown-link>
                         @endif
 
-                        {{-- 🛡️ EXCLUSIVO ADMIN (Maia e Marcos): ROTA TÉCNICA AJUSTADA --}}
+                        {{-- 🛡️ EXCLUSIVO ADMIN (Maia e Marcos) --}}
                         @if(Auth::user()->is_admin)
                         <x-dropdown-link :href="route('admin.plans')" class="text-indigo-600 font-black border-t border-gray-100 bg-gray-50">
                             ⚙️ Gerenciar Plano/Módulos
@@ -150,6 +155,7 @@
         </div>
     </div>
 
+    {{-- MENU MOBILE RESPONSIVO --}}
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden border-t border-gray-200">
         <div class="pt-2 pb-3 space-y-1">
             @if (Auth::check() && Auth::user()->has_admin_access)
@@ -179,8 +185,10 @@
             <x-responsive-nav-link :href="route('admin.payment.index')" :active="request()->routeIs('admin.payment.*')">
                 {{ __('Caixa') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('admin.whatsapp.chat'" :active="request()->routeIs('admin.whatsapp.*')">
-                {{ __('Whatsapp') }}
+            
+            {{-- 🟢 CORREÇÃO DA SINTAXE: Adicionado parêntese de fechamento da rota no Mobile --}}
+            <x-responsive-nav-link :href="route('admin.whatsapp.chat')" :active="request()->routeIs('admin.whatsapp.*')" class="text-emerald-600 font-bold">
+                {{ __('WhatsApp Central') }}
             </x-responsive-nav-link>
 
             {{-- 🛡️ TRAVA PARA COLABORADOR --}}
@@ -200,7 +208,6 @@
             @endif
 
             @if(Auth::user()->is_admin)
-            {{-- AJUSTADO PARA A ROTA DE PLANOS --}}
             <x-responsive-nav-link :href="route('admin.plans')" class="text-indigo-600 font-bold">
                 ⚙️ Alterar Plano/Módulos
             </x-responsive-nav-link>
