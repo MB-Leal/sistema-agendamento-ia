@@ -13,7 +13,7 @@
                         @endforeach
                     </select>
                 </form>
-            </div>           
+            </div>
 
             <div class="flex-1 overflow-y-auto divide-y divide-gray-100 style-scrollbar bg-white">
                 @forelse($contacts as $contact)
