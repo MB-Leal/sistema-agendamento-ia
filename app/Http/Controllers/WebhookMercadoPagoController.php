@@ -10,60 +10,114 @@ use App\Services\WhatsAppService;
 
 class WebhookMercadoPagoController extends Controller
 {
-    protected $whatsAppService;
+    protected string $mpToken;
 
-    public function __construct(WhatsAppService $whatsAppService)
+    public function __construct()
     {
-        $this->whatsAppService = $whatsAppService;
+        // Pega automaticamente o token de produção que salvamos no .env
+        $this->mpToken = env('MERCADO_PAGO_ACCESS_TOKEN') ?? '';
     }
 
-    public function handle(Request $request)
+    public function handleWebhook(Request $request)
     {
         $payload = $request->all();
-        Log::info("Webhook do Mercado Pago recebido na Arena: " . json_encode($payload));
+        Log::info('Webhook Mercado Pago recebido:', $payload);
 
-        // O Mercado Pago avisa sobre "payments" enviando o tipo e o ID da transação
+        // O Mercado Pago envia notificações de vários tipos. Filtramos apenas por "payment"
         if (isset($payload['type']) && $payload['type'] === 'payment') {
             $paymentId = $payload['data']['id'] ?? null;
 
             if ($paymentId) {
-                // Consultamos o status real do pagamento direto no servidor seguro do Mercado Pago
-                $token = env('MERCADO_PAGO_ACCESS_TOKEN');
-                $response = Http::withToken($token)->get("https://api.mercadopago.com/v1/payments/{$paymentId}");
-
-                if ($response->successful()) {
-                    $paymentData = $response->json();
-                    $status = $paymentData['status'] ?? 'pending';
-
-                    Log::info("Status verificado no Mercado Pago para o ID {$paymentId}: {$status}");
-
-                    if ($status === 'approved') {
-                        // Busca a reserva atrelada a esse pagamento
-                        $reserva = Reserva::where('payment_id', $paymentId)->first();
-
-                        if ($reserva && $reserva->status !== 'confirmed') {
-                            // 🚀 Efetua a baixa automática
-                            $reserva->update([
-                                'status' => 'confirmed',
-                                'payment_status' => 'approved'
-                            ]);
-
-                            Log::info("Reserva ID {$reserva->id} CONFIRMADA automaticamente por PIX!");
-
-                            // Busca o telefone do cliente para parabenizá-lo
-                            $user = $reserva->user;
-                            if ($user && $user->telefone) {
-                                $mensagemSucesso = "🎉 *Pagamento Confirmado!*\n\nOlá, {$user->name}, seu PIX de sinal foi compensado com sucesso pelo banco. Sua reserva para a quadra da *Arena Elizeu* está confirmada e garantida!";
-                                
-                                $this->whatsAppService->sendMessage($user->telefone, $mensagemSucesso);
-                            }
-                        }
-                    }
-                }
+                Log::info("Processando baixa do pagamento ID: {$paymentId}");
+                $this->consultarEConfirmarPagamento($paymentId);
             }
         }
 
-        // Retornamos obrigatoriamente HTTP 200 ou 201 para o Mercado Pago não achar que nosso servidor caiu
+        // Retornamos 200 ou 201 obrigatoriamente para o Mercado Pago saber que recebemos com sucesso
         return response()->json(['status' => 'success'], 200);
+    }
+
+    protected function consultarEConfirmarPagamento(string $paymentId)
+    {
+        if (empty($this->mpToken)) {
+            Log::error("Erro no Webhook: Token do Mercado Pago não configurado no .env");
+            return;
+        }
+
+        try {
+            // Consulta a API oficial do Mercado Pago para validar o status real da transação
+            $response = Http::withToken($this->mpToken)
+                ->get("https://api.mercadopago.com/v1/payments/{$paymentId}");
+
+            if ($response->successful()) {
+                $paymentData = $response->json();
+                $status = $paymentData['status'] ?? 'pending';
+                
+                Log::info("Status retornado pelo Mercado Pago para o ID {$paymentId}: {$status}");
+
+                // Se o status for aprovado (dinheiro na conta da Arena), damos a baixa
+                if ($status === 'approved') {
+                    
+                    // Busca a pré-reserva que gravamos na tabela usando o ID do pagamento
+                    $reserva = Reserva::where('payment_id', $paymentId)->first();
+
+                    if ($reserva) {
+                        // Se ela já estiver confirmada, não faz nada para evitar loops
+                        if ($reserva->status === 'confirmed') {
+                            Log::info("Reserva ID {$reserva->id} já constava como confirmada.");
+                            return;
+                        }
+
+                        // 1. Atualiza os status no banco de dados
+                        $reserva->update([
+                            'status' => 'confirmed',
+                            'payment_status' => 'approved'
+                        ]);
+
+                        Log::info("Sucesso! Reserva ID {$reserva->id} alterada para CONFIRMED via Webhook.");
+
+                        // 2. Dispara a mensagem de vitória via WhatsApp para o cliente
+                        $this->enviarMensagemConfirmacaoWhatsApp($reserva);
+
+                    } else {
+                        Log::warning("Aviso: Recebemos o pagamento ID {$paymentId}, mas nenhuma reserva correspondente foi encontrada no banco.");
+                    }
+                }
+            } else {
+                Log::error("Falha ao consultar pagamento {$paymentId} na API do Mercado Pago: " . $response->body());
+            }
+
+        } catch (\Exception $e) {
+            Log::error("Erro fatal no processamento do webhook de pagamento: " . $e->getMessage());
+        }
+    }
+
+    protected function enviarMensagemConfirmacaoWhatsApp(Reserva $reserva)
+    {
+        try {
+            // Carrega o usuário dono da reserva para pegar o whatsapp_contact
+            $usuario = $reserva->user;
+
+            if ($usuario && !empty($usuario->whatsapp_contact)) {
+                $whatsAppService = app(WhatsAppService::class);
+                
+                // Formata a data para ficar bonita na mensagem (Ex: 13/06/2026)
+                $dataFormatada = date('d/m/Y', strtotime($reserva->data_reserva));
+                $horaInicio = substr($reserva->hora_inicio, 0, 5);
+
+                $mensagemSucesso = "⚽ *PAGAMENTO CONFIRMADO!* ⚽\n\n" .
+                                   "Olá, *{$usuario->name}*!\n" .
+                                   "Seu pagamento do sinal foi compensado e seu horário está oficialmente *GARANTIDO* no sistema!\n\n" .
+                                   "📅 *Data:* {$dataFormatada}\n" .
+                                   "⏰ *Horário:* {$horaInicio}h\n" .
+                                   "🏟️ *Arena:* Arena Elizeu\n\n" .
+                                   "_Obrigado pela preferência, bom jogo!_";
+
+                $whatsAppService->sendMessage($usuario->whatsapp_contact, $mensagemSucesso);
+                Log::info("Notificação de confirmação enviada com sucesso para o WhatsApp: {$usuario->whatsapp_contact}");
+            }
+        } catch (\Exception $e) {
+            Log::error("Erro ao enviar notificação de sucesso no WhatsApp: " . $e->getMessage());
+        }
     }
 }

@@ -31,9 +31,17 @@
                         $hasUnread = $contact->unread_count > 0;
                         $exibitionNumber = str_replace('@s.whatsapp.net', '', $contact->remote_jid);
                         $exibitionName = (!empty($contact->customer_name) && filter_var($contact->customer_name, FILTER_VALIDATE_EMAIL) === false) ? $contact->customer_name : $exibitionNumber;
+                        
+                        // Definição dinâmica de classes baseada no status do chat
+                        $bgClass = 'bg-white hover:bg-[#f5f6f6]';
+                        if ($activeChat == $contact->remote_jid) {
+                            $bgClass = 'bg-[#eaebeb]'; // Selecionado atual
+                        } elseif ($isHuman) {
+                            $bgClass = 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-amber-500'; // Destaque modo humano
+                        }
                     @endphp
                     <a href="?connection_id={{ $selectedConnectionId }}&chat={{ $contact->remote_jid }}" 
-                       class="flex items-center h-[72px] px-3 hover:bg-[#f5f6f6] transition duration-150 contact-item {{ $activeChat == $contact->remote_jid ? 'bg-[#eaebeb]' : '' }}"
+                       class="flex items-center h-[72px] px-3 transition duration-150 contact-item {{ $bgClass }}"
                        data-name="{{ strtolower($exibitionName) }}">
                         
                         <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-base text-gray-500 shrink-0 select-none">
@@ -57,7 +65,7 @@
                                 
                                 <div class="flex gap-1 items-center shrink-0 ml-2">
                                     @if($isHuman)
-                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-red-500 text-white animate-pulse tracking-wider">HUMANO</span>
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-600 text-white animate-pulse tracking-wider">HUMANO</span>
                                     @endif
 
                                     @if($hasUnread)

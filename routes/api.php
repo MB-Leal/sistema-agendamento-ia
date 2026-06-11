@@ -19,3 +19,4 @@ Route::get('/whatsapp/teste-envio', function(WhatsAppService $ws) {
     return response()->json(['enviado' => $resultado]);
 });
 Route::post('/mercadopago/webhook', [WebhookMercadoPagoController::class, 'handle']);
+Route::post('/mercadopago/webhook', [WebhookMercadoPagoController::class, 'handleWebhook']);
