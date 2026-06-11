@@ -13,16 +13,7 @@
                         @endforeach
                     </select>
                 </form>
-            </div>
-
-            <div class="p-2 bg-white border-b border-gray-100 shrink-0">
-                <div class="relative w-full">
-                    <input type="text" id="searchChat" class="w-full bg-[#f0f2f5] rounded-lg border-none text-xs py-2 pl-9 pr-4 placeholder-gray-500 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="Pesquisar conversa">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
-                        🔍
-                    </div>
-                </div>
-            </div>
+            </div>           
 
             <div class="flex-1 overflow-y-auto divide-y divide-gray-100 style-scrollbar bg-white">
                 @forelse($contacts as $contact)
