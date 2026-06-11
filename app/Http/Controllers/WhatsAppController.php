@@ -62,9 +62,7 @@ class WhatsAppController extends Controller
                     // 🛡️ TRAVA MESTRE: Se o usuário estiver marcado como atendimento humano em alguma mensagem anterior, para a IA
                     // Buscamos se o usuário existe de forma flexível pelas colunas do banco
                     //$usuario = \App\Models\User::where('phone_number', $phoneContact)->orWhere('telefone', $phoneContact)->first();
-                    $usuario = \App\Models\User::where('whatsapp_contact', $phone)
-            ->orWhere('whatsapp_contact', 'like', '%' . substr($phone, -8))
-            ->first();
+                    $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))->first();
                     
                     // Se o banco de dados tiver uma flag chat_human_mode ativada, barramos a IA aqui
                     if ($usuario && isset($usuario->chat_human_mode) && $usuario->chat_human_mode == 1) {
