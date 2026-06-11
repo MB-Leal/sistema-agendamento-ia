@@ -15,15 +15,6 @@
                 </form>
             </div>
 
-            <div class="p-2 bg-white border-b border-gray-100 shrink-0">
-                <div class="relative w-full">
-                    <input type="text" id="searchChat" class="w-full bg-[#f0f2f5] rounded-lg border-none text-xs py-2 pl-9 pr-4 placeholder-gray-500 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="Pesquisar conversa">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
-                        🔍
-                    </div>
-                </div>
-            </div>
-
             <div class="flex-1 overflow-y-auto divide-y divide-gray-100 style-scrollbar bg-white">
                 @forelse($contacts as $contact)
                     @php 
@@ -40,8 +31,7 @@
                         }
                     @endphp
                     <a href="?connection_id={{ $selectedConnectionId }}&chat={{ $contact->remote_jid }}" 
-                       class="flex items-center h-[72px] px-3 transition duration-150 contact-item {{ $bgClass }}"
-                       data-name="{{ strtolower($exibitionName) }}">
+                       class="flex items-center h-[72px] px-3 transition duration-150 contact-item {{ $bgClass }}">
                         
                         <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-base text-gray-500 shrink-0 select-none">
                             👤
@@ -85,11 +75,11 @@
                 <div class="h-14 px-6 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between shrink-0 z-10 shadow-xs">
                     <div class="flex items-center">
                         <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-sm text-emerald-600 select-none mr-3">
-                            Public
+                            💬
                         </div>
                         <div>
                             <h6 class="font-bold text-gray-800 text-sm leading-tight">
-                                💬 {{ str_replace('@s.whatsapp.net', '', $activeChat) }}
+                                {{ str_replace('@s.whatsapp.net', '', $activeChat) }}
                             </h6>
                             <small class="text-emerald-600 font-semibold text-xs">Atendimento em tempo real</small>
                         </div>
@@ -136,18 +126,6 @@
     <script>
         const box = document.getElementById('messagesBox');
         if(box) { box.scrollTop = box.scrollHeight; }
-
-        document.getElementById('searchChat').addEventListener('input', function(e) {
-            const value = e.target.value.toLowerCase();
-            document.querySelectorAll('.contact-item').forEach(item => {
-                const name = item.getAttribute('data-name');
-                if(name.includes(value)) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-        });
     </script>
 
     <style>
