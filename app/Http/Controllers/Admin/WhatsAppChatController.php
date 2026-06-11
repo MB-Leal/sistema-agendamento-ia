@@ -13,7 +13,6 @@ class WhatsAppChatController extends Controller
     public function index(Request $request)
     {
         // 1. Busca os números/filiais cadastrados da empresa
-        // (Caso ainda não tenha cadastrado na tabela nova, simulamos o mestre atual)
         $connections = DB::table('whatsapp_connections')->get();
         if ($connections->isEmpty()) {
             DB::table('whatsapp_connections')->insert([
@@ -28,7 +27,6 @@ class WhatsAppChatController extends Controller
         $selectedConnectionId = $request->input('connection_id', $connections->first()->id);
 
         // 2. QUERY MASTER: Lista de contatos da esquerda (Igual WhatsApp Web)
-        // Prioriza: 1º Humano Ativo, 2º Mensagens Não Lidas, 3º Data da última mensagem
         $contacts = WhatsAppMessage::select('remote_jid', 'customer_name', DB::raw('MAX(timestamp) as last_message_time'))
             ->groupBy('remote_jid', 'customer_name')
             ->get()
@@ -36,7 +34,7 @@ class WhatsAppChatController extends Controller
                 // Remove o @s.whatsapp.net para limpar o número do cliente
                 $purePhone = str_replace('@s.whatsapp.net', '', $contact->remote_jid);
                 
-                // Busca se esse cliente específico está com o gatilho de [ATIVAR_HUMANO] ligado no User
+                // 🛡️ CORREÇÃO CIRÚRGICA: Busca utilizando estritamente a coluna real 'whatsapp_contact'
                 $user = User::where('whatsapp_contact', $purePhone)
                             ->orWhere('whatsapp_contact', 'like', '%' . substr($purePhone, -8))
                             ->first();
@@ -56,15 +54,14 @@ class WhatsAppChatController extends Controller
                 return $contact;
             });
 
-        // Ordenação inteligente para o painel
+        // 📊 ORDENAÇÃO INTELIGENTE EXIGIDA:
+        // Primeiro: Modo Humano Ativo no topo.
+        // Segundo: Se empatar no modo humano (ou para as demais conversas), ordena por mensagens mais recentes.
         $contacts = $contacts->sort(function($a, $b) {
             if ($a->is_human_mode != $b->is_human_mode) {
                 return $b->is_human_mode <=> $a->is_human_mode; // Humano ativo vai pro topo!
             }
-            if ($a->unread_count != $b->unread_count) {
-                return $b->unread_count <=> $a->unread_count; // Não lidas em segundo lugar
-            }
-            return $b->last_message_time <=> $a->last_message_time; // Cronológica por fim
+            return $b->last_message_time <=> $a->last_message_time; // Mais recentes primeiro
         });
 
         // Se houver um chat selecionado na URL, carrega o histórico dele
@@ -105,9 +102,10 @@ class WhatsAppChatController extends Controller
             'timestamp' => now()
         ]);
 
-        // 3. 🎯 REGRA DE NEGÓCIO: Se o gestor respondeu humana e manualmente, desliga o modo [HUMANO_ATIVO] 
-        // para que a IA possa voltar a atender futuramente se o cliente mandar nova mensagem depois!
-        User::where('phone_number', $purePhone)->orWhere('telefone', $purePhone)->update(['chat_human_mode' => 0]);
+        // 3. 🎯 CORREÇÃO DA REGRA DE NEGÓCIO: Desativa o modo humano usando a coluna real 'whatsapp_contact'
+        User::where('whatsapp_contact', $purePhone)
+            ->orWhere('whatsapp_contact', 'like', '%' . substr($purePhone, -8))
+            ->update(['chat_human_mode' => 0]);
 
         return redirect()->back()->with('success', 'Mensagem enviada!');
     }
