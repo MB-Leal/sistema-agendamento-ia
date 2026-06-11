@@ -26,7 +26,7 @@ class WhatsAppController extends Controller
         $this->mercadoPagoService = $mercadoPagoService;
     }
 
-    public function handleWebhook(Request $request)
+   public function handleWebhook(Request $request)
     {
         if ($request->isMethod('post')) {
             Log::info('Webhook recebido da Meta! Payload bruto: ' . json_encode($request->all()));
@@ -51,6 +51,7 @@ class WhatsAppController extends Controller
             $messageData = $payload['entry'][0]['changes'][0]['value']['messages'][0];
             
             $phoneContact = $messageData['from'] ?? null;
+            
             $messageType = $messageData['type'] ?? null;
             $customerName = $payload['entry'][0]['changes'][0]['value']['contacts'][0]['profile']['name'] ?? 'Cliente';
 
@@ -59,12 +60,12 @@ class WhatsAppController extends Controller
 
                 if ($phoneContact && $messageText) {
                     
-                    // 🛡️ TRAVA MESTRE: Se o usuário estiver marcado como atendimento humano em alguma mensagem anterior, para a IA
-                    // Buscamos se o usuário existe de forma flexível pelas colunas do banco
-                    //$usuario = \App\Models\User::where('phone_number', $phoneContact)->orWhere('telefone', $phoneContact)->first();
-                    $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))->first();
+                    // 🛡️ TRAVA MESTRE: Buscamos se o usuário existe utilizando estritamente a coluna real 'whatsapp_contact'
+                    $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)
+                        ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
+                        ->first();
                     
-                    // Se o banco de dados tiver uma flag chat_human_mode ativada, barramos a IA aqui
+                    // Se o banco de dados tiver a flag chat_human_mode ativa, barramos a IA aqui
                     if ($usuario && isset($usuario->chat_human_mode) && $usuario->chat_human_mode == 1) {
                         Log::info("Mensagem recebida mas ignorada pela IA. Usuário {$phoneContact} está em atendimento Humano.");
                         return response('EVENT_RECEIVED', 200);
@@ -92,11 +93,10 @@ class WhatsAppController extends Controller
                                 $aiResponse .= "\n\n_🤖 Atendimento automático pausado. Um atendente humano assumirá a conversa em breve._";
                                 
                                 if ($usuario) {
-                                    // Se a coluna chat_human_mode existir na tabela users, ativa. 
-                                    // Caso contrário, o log registra o pedido para o painel.
                                     try {
                                         $usuario->update(['chat_human_mode' => 1]);
-                                    } catch (\Exception $e) { Log::warning("Coluna chat_human_mode não implementada ainda."); }
+                                        Log::info("Usuário {$phoneContact} teve o chat_human_mode ativado no banco.");
+                                    } catch (\Exception $e) { Log::warning("Erro ao atualizar chat_human_mode: " . $e->getMessage()); }
                                 }
                                 Log::info("Usuário {$phoneContact} solicitou transbordo humano com sucesso.");
                             }
@@ -109,8 +109,14 @@ class WhatsAppController extends Controller
                                 
                                 try {
                                     if (!$usuario) {
+                                        // 🛡️ CORREÇÃO CIRÚRGICA: Removidas colunas fantasmas e inserida a oficial 'whatsapp_contact'
                                         $usuario = \App\Models\User::create([
-                                            'name' => $customerName, 'email' => $phoneContact.'@arena.com', 'phone_number' => $phoneContact, 'telefone' => $phoneContact, 'password' => bcrypt(uniqid()), 'role' => 'customer', 'arena_id' => 1
+                                            'name' => $customerName, 
+                                            'email' => $phoneContact.'@arena.com', 
+                                            'whatsapp_contact' => $phoneContact, 
+                                            'password' => bcrypt(uniqid()), 
+                                            'role' => 'customer', 
+                                            'arena_id' => 1
                                         ]);
                                     }
 
@@ -148,8 +154,14 @@ class WhatsAppController extends Controller
                                     
                                     try {
                                         if (!$usuario) {
+                                            // 🛡️ CORREÇÃO CIRÚRGICA: Removidas colunas fantasmas e inserida a oficial 'whatsapp_contact'
                                             $usuario = \App\Models\User::create([
-                                                'name' => $customerName, 'email' => $phoneContact.'@arena.com', 'phone_number' => $phoneContact, 'telefone' => $phoneContact, 'password' => bcrypt(uniqid()), 'role' => 'customer', 'arena_id' => 1
+                                                'name' => $customerName, 
+                                                'email' => $phoneContact.'@arena.com', 
+                                                'whatsapp_contact' => $phoneContact, 
+                                                'password' => bcrypt(uniqid()), 
+                                                'role' => 'customer', 
+                                                'arena_id' => 1
                                             ]);
                                         }
 
