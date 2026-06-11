@@ -1,7 +1,7 @@
 <x-app-layout>
     <div class="w-full h-[calc(100vh-65px)] flex overflow-hidden bg-[#f0f2f5] font-sans antialiased">
         
-        <div class="w-[310px] h-full bg-white border-r border-gray-200 flex flex-col shrink-0">
+        <div class="w-[310px] h-full bg-white border-r border-gray-200 flex flex-col shrink-0 z-10">
             
             <div class="p-3 bg-[#f0f2f5] border-b border-gray-200 shrink-0">
                 <form method="GET" action="{{ route('admin.whatsapp.chat') }}" id="form-connection">
@@ -15,6 +15,15 @@
                 </form>
             </div>
 
+            <div class="p-2 bg-white border-b border-gray-100 shrink-0">
+                <div class="relative w-full">
+                    <input type="text" id="searchChat" class="w-full bg-[#f0f2f5] rounded-lg border-none text-xs py-2 pl-9 pr-4 placeholder-gray-500 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="Pesquisar conversa">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
+                        🔍
+                    </div>
+                </div>
+            </div>
+
             <div class="flex-1 overflow-y-auto divide-y divide-gray-100 style-scrollbar bg-white">
                 @forelse($contacts as $contact)
                     @php 
@@ -23,12 +32,11 @@
                         $exibitionNumber = str_replace('@s.whatsapp.net', '', $contact->remote_jid);
                         $exibitionName = (!empty($contact->customer_name) && filter_var($contact->customer_name, FILTER_VALIDATE_EMAIL) === false) ? $contact->customer_name : $exibitionNumber;
                         
-                        // Definição dinâmica de classes baseada no status do chat
                         $bgClass = 'bg-white hover:bg-[#f5f6f6]';
                         if ($activeChat == $contact->remote_jid) {
-                            $bgClass = 'bg-[#eaebeb]'; // Selecionado atual
+                            $bgClass = 'bg-[#eaebeb]';
                         } elseif ($isHuman) {
-                            $bgClass = 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-amber-500'; // Destaque modo humano
+                            $bgClass = 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-amber-500 pl-2';
                         }
                     @endphp
                     <a href="?connection_id={{ $selectedConnectionId }}&chat={{ $contact->remote_jid }}" 
@@ -74,24 +82,24 @@
 
         <div class="flex-1 flex flex-col h-full bg-[#efeae2] relative min-w-0">
             @if($activeChat)
-                <div class="h-14 px-4 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between shrink-0 z-10">
+                <div class="h-14 px-6 bg-[#f0f2f5] border-b border-gray-200 flex items-center justify-between shrink-0 z-10 shadow-xs">
                     <div class="flex items-center">
                         <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-sm text-emerald-600 select-none mr-3">
-                            💬
+                            Public
                         </div>
                         <div>
                             <h6 class="font-bold text-gray-800 text-sm leading-tight">
-                                {{ str_replace('@s.whatsapp.net', '', $activeChat) }}
+                                💬 {{ str_replace('@s.whatsapp.net', '', $activeChat) }}
                             </h6>
                             <small class="text-emerald-600 font-semibold text-xs">Atendimento em tempo real</small>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex-1 p-4 overflow-y-auto flex flex-col gap-2.5 bg-whatsapp-pattern style-scrollbar" id="messagesBox">
+                <div class="flex-1 px-8 py-4 overflow-y-auto flex flex-col gap-2.5 bg-whatsapp-pattern style-scrollbar" id="messagesBox">
                     @foreach($messages as $msg)
                         <div class="w-full flex {{ $msg->from_me ? 'justify-end' : 'justify-start' }}">
-                            <div class="p-2 rounded-lg shadow-xs max-w-xl relative break-words" 
+                            <div class="p-2.5 rounded-lg shadow-xs max-w-xl relative break-words" 
                                  style="{{ $msg->from_me ? 'background-color: #d9fdd3; border-top-right-radius: 0;' : 'background-color: #ffffff; border-top-left-radius: 0;' }}">
                                 <p class="text-sm text-gray-900 leading-normal mb-1 whitespace-pre-wrap">{{ $msg->message }}</p>
                                 <div class="text-right text-gray-400 select-none font-mono" style="font-size: 9px; margin-top: -2px;">
@@ -102,12 +110,12 @@
                     @endforeach
                 </div>
 
-                <div class="h-16 px-4 bg-[#f0f2f5] border-t border-gray-200 flex items-center shrink-0 z-10">
+                <div class="h-16 px-6 bg-[#f0f2f5] border-t border-gray-200 flex items-center shrink-0 z-10">
                     <form method="POST" action="{{ route('admin.whatsapp.send') }}" class="flex w-full gap-3 items-center">
                         @csrf
                         <input type="hidden" name="remote_jid" value="{{ $activeChat }}">
-                        <input type="text" name="message" class="flex-1 rounded-lg border-none shadow-xs text-sm py-2.5 px-4 bg-white placeholder-gray-400 focus:ring-0 focus:outline-none" placeholder="Digite uma mensagem" required autocomplete="off">
-                        <button type="submit" class="inline-flex items-center justify-center h-9 w-9 rounded-full text-white bg-emerald-600 hover:bg-emerald-700 transition duration-150 shrink-0 shadow-sm text-sm">
+                        <input type="text" name="message" class="flex-1 rounded-lg border-none shadow-xs text-sm py-2.5 px-4 bg-white placeholder-gray-400 focus:ring-1 focus:ring-emerald-500 focus:outline-none" placeholder="Digite uma mensagem" required autocomplete="off">
+                        <button type="submit" class="inline-flex items-center justify-center h-9 w-9 rounded-full text-white bg-emerald-600 hover:bg-emerald-700 transition duration-150 shrink-0 shadow-sm text-sm focus:outline-none">
                             🚀
                         </button>
                     </form>
@@ -144,7 +152,7 @@
 
     <style>
         .style-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
-        .style-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.15); border-radius: 99px; }
+        .style-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.16); border-radius: 99px; }
         
         .bg-whatsapp-pattern {
             background-color: #efeae2;
