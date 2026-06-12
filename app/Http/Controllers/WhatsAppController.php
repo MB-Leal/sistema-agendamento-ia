@@ -32,7 +32,7 @@ class WhatsAppController extends Controller
             Log::info('Webhook recebido da Meta! Payload bruto: ' . json_encode($request->all()));
         }
 
-        // 1. VALIDAÇÃO DO WEBHOOK
+        // 1. VALIDAÇÃO DO WEBHOOK (GET)
         if ($request->isMethod('get')) {
             $mode = $request->query('hub_mode');
             $token = $request->query('hub_verify_token');
@@ -51,7 +51,6 @@ class WhatsAppController extends Controller
             $messageData = $payload['entry'][0]['changes'][0]['value']['messages'][0];
             
             $phoneContact = $messageData['from'] ?? null;
-            
             $messageType = $messageData['type'] ?? null;
             $customerName = $payload['entry'][0]['changes'][0]['value']['contacts'][0]['profile']['name'] ?? 'Cliente';
 
@@ -60,18 +59,23 @@ class WhatsAppController extends Controller
 
                 if ($phoneContact && $messageText) {
                     
-                    // 🛡️ TRAVA MESTRE: Buscamos se o usuário existe utilizando estritamente a coluna real 'whatsapp_contact'
-                    $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)
-                        ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
-                        ->first();
+                    // 🛡️ TRAVA MESTRE: Consulta estritamente via coluna oficial do banco 'whatsapp_contact'
+                    $usuario = null;
+                    try {
+                        $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)
+                            ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
+                            ->first();
+                    } catch (\Exception $e) {
+                        Log::error("Erro no cruzamento de dados: " . $e->getMessage());
+                    }
                     
-                    // Se o banco de dados tiver a flag chat_human_mode ativa, barramos a IA aqui
+                    // Se o utilizador estiver em atendimento Humano ativo, ignora a IA
                     if ($usuario && isset($usuario->chat_human_mode) && $usuario->chat_human_mode == 1) {
                         Log::info("Mensagem recebida mas ignorada pela IA. Usuário {$phoneContact} está em atendimento Humano.");
                         return response('EVENT_RECEIVED', 200);
                     }
 
-                    // Grava histórico de entrada
+                    // Grava histórico de entrada do cliente no painel
                     try {
                         WhatsAppMessage::create([
                             'remote_jid' => $phoneContact . '@s.whatsapp.net',
@@ -79,9 +83,9 @@ class WhatsAppController extends Controller
                             'from_me' => false,
                             'timestamp' => now()
                         ]);
-                    } catch (\Exception $dbEx) { Log::error("Erro banco: " . $dbEx->getMessage()); }
+                    } catch (\Exception $dbEx) { Log::error("Erro banco histórico: " . $dbEx->getMessage()); }
 
-                    // Fluxo da IA
+                    // Processamento inteligente do fluxo OpenAI
                     try {
                         $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText);
 
@@ -95,21 +99,19 @@ class WhatsAppController extends Controller
                                 if ($usuario) {
                                     try {
                                         $usuario->update(['chat_human_mode' => 1]);
-                                        Log::info("Usuário {$phoneContact} teve o chat_human_mode ativado no banco.");
-                                    } catch (\Exception $e) { Log::warning("Erro ao atualizar chat_human_mode: " . $e->getMessage()); }
+                                        Log::info("Usuário {$phoneContact} ativado para modo humano via webhook.");
+                                    } catch (\Exception $e) { Log::error("Erro ao salvar chat_human_mode: " . $e->getMessage()); }
                                 }
                                 Log::info("Usuário {$phoneContact} solicitou transbordo humano com sucesso.");
                             }
 
-                            // 🚨 GATILHO B: PARCERIA / DINHEIRO PRESENCIAL / MAQUININHA (RESERVA PENDENTE DIRETA)
+                            // 🚨 GATILHO B: PARCERIA / DINHEIRO PRESENCIAL (RESERVA PENDENTE DIRETA)
                             if (preg_match('/\[RESERVA_PENDENTE:([0-9.]+)\]/', $aiResponse, $matches)) {
                                 $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([0-9.]+)\]/', '', $aiResponse);
-                                
-                                Log::info("IA aprovou criação de Reserva Pendente sem PIX (Parceria ou Presencial) para {$phoneContact}");
+                                Log::info("IA aprovou criação de Reserva Pendente sem PIX para {$phoneContact}");
                                 
                                 try {
                                     if (!$usuario) {
-                                        // 🛡️ CORREÇÃO CIRÚRGICA: Removidas colunas fantasmas e inserida a oficial 'whatsapp_contact'
                                         $usuario = \App\Models\User::create([
                                             'name' => $customerName, 
                                             'email' => $phoneContact.'@arena.com', 
@@ -123,11 +125,11 @@ class WhatsAppController extends Controller
                                     \App\Models\Reserva::create([
                                         'user_id' => $usuario->id, 'arena_id' => 1, 'data_reserva' => date('Y-m-d', strtotime('next saturday')), 'hora_inicio' => '14:00:00', 'hora_fim' => '15:00:00', 'total_price' => 0.00, 'status' => 'pending'
                                     ]);
-                                    Log::info("Reserva salva com sucesso como Pendente para validação do Gestor.");
+                                    Log::info("Reserva salva com sucesso como Pendente para validação.");
                                 } catch (\Exception $e) { Log::error("Erro ao salvar reserva pendente: ".$e->getMessage()); }
                             }
 
-                            // 🚨 GATILHO C: CANCELAMENTO AUTO ASSISTIDO (+24 HORAS)
+                            // 🚨 GATILHO C: CANCELAMENTO AUTO ASSISTIDO
                             if (str_contains($aiResponse, '[CANCELAR_RESERVA]')) {
                                 $aiResponse = str_replace('[CANCELAR_RESERVA]', '', $aiResponse);
                                 
@@ -142,7 +144,7 @@ class WhatsAppController extends Controller
                                 } catch (\Exception $e) { Log::error("Erro ao cancelar reserva: ".$e->getMessage()); }
                             }
 
-                            // 🎯 GATILHO D: INTERCEPÇÃO TRADICIONAL DO PIX DINÂMICO
+                            // 🎯 GATILHO D: INTERCEPÇÃO TRADICIONAL DO PIX DINÂMICO MERCADO PAGO
                             if (preg_match('/\[GERAR_PIX:([0-9.]+)\]/', $aiResponse, $matches)) {
                                 $valorPix = $matches[1];
                                 $aiResponse = preg_replace('/\[GERAR_PIX:([0-9.]+)\]/', '', $aiResponse);
@@ -154,7 +156,6 @@ class WhatsAppController extends Controller
                                     
                                     try {
                                         if (!$usuario) {
-                                            // 🛡️ CORREÇÃO CIRÚRGICA: Removidas colunas fantasmas e inserida a oficial 'whatsapp_contact'
                                             $usuario = \App\Models\User::create([
                                                 'name' => $customerName, 
                                                 'email' => $phoneContact.'@arena.com', 
@@ -168,11 +169,11 @@ class WhatsAppController extends Controller
                                         \App\Models\Reserva::create([
                                             'user_id' => $usuario->id, 'arena_id' => 1, 'data_reserva' => date('Y-m-d', strtotime('next saturday')), 'hora_inicio' => '14:00:00', 'hora_fim' => '15:00:00', 'total_price' => (float)$valorPix, 'status' => 'pending', 'payment_id' => $pixData['payment_id'], 'payment_status' => 'pending'
                                         ]);
-                                    } catch (\Exception $e) { Log::error("Erro na persistência: ".$e->getMessage()); }
+                                    } catch (\Exception $e) { Log::error("Erro na persistência do PIX: ".$e->getMessage()); }
                                 }
                             }
 
-                            // Envia ao WhatsApp do Cliente
+                            // Envia a resposta final montada para o WhatsApp do Cliente
                             if (trim($aiResponse) !== '[HUMANO_ATIVO]') {
                                 $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
                                 
@@ -183,7 +184,7 @@ class WhatsAppController extends Controller
                                 } catch (\Exception $e) {}
                             }
                         }
-                    } catch (\Exception $e) { Log::error("Erro fatal: " . $e->getMessage()); }
+                    } catch (\Exception $e) { Log::error("Erro fatal no fluxo interno OpenAI: " . $e->getMessage()); }
                 }
             }
         }
