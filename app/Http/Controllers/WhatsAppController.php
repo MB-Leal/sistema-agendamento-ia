@@ -17,7 +17,7 @@ class WhatsAppController extends Controller
 
     // O Laravel injeta os três serviços automaticamente aqui no construtor
     public function __construct(
-        WhatsAppService $whatsAppService, 
+        WhatsAppService $whatsAppService,
         OpenAIService $openAIService,
         MercadoPagoService $mercadoPagoService
     ) {
@@ -49,7 +49,7 @@ class WhatsAppController extends Controller
 
         if (isset($payload['entry'][0]['changes'][0]['value']['messages'][0])) {
             $messageData = $payload['entry'][0]['changes'][0]['value']['messages'][0];
-            
+
             $phoneContact = $messageData['from'] ?? null;
             $messageType = $messageData['type'] ?? null;
             $customerName = $payload['entry'][0]['changes'][0]['value']['contacts'][0]['profile']['name'] ?? 'Cliente';
@@ -58,7 +58,7 @@ class WhatsAppController extends Controller
                 $messageText = $messageData['text']['body'] ?? null;
 
                 if ($phoneContact && $messageText) {
-                    
+
                     // 🛡️ TRAVA MESTRE: Consulta via coluna oficial do banco 'whatsapp_contact'
                     $usuario = null;
                     try {
@@ -68,7 +68,7 @@ class WhatsAppController extends Controller
                     } catch (\Exception $e) {
                         Log::error("Erro no cruzamento de dados: " . $e->getMessage());
                     }
-                    
+
                     // Se o utilizador estiver em atendimento Humano ativo, ignora a IA
                     if ($usuario && isset($usuario->chat_human_mode) && $usuario->chat_human_mode == 1) {
                         Log::info("Mensagem recebida mas ignorada pela IA. Usuário {$phoneContact} está em atendimento Humano.");
@@ -101,7 +101,9 @@ class WhatsAppController extends Controller
                             'from_me' => false,
                             'timestamp' => now()
                         ]);
-                    } catch (\Exception $dbEx) { Log::error("Erro banco histórico: " . $dbEx->getMessage()); }
+                    } catch (\Exception $dbEx) {
+                        Log::error("Erro banco histórico: " . $dbEx->getMessage());
+                    }
 
                     // Processamento inteligente do fluxo OpenAI
                     try {
@@ -114,12 +116,14 @@ class WhatsAppController extends Controller
                             if (str_contains($aiResponse, '[ATIVAR_HUMANO]')) {
                                 $aiResponse = str_replace('[ATIVAR_HUMANO]', '', $aiResponse);
                                 $aiResponse .= "\n\n_🤖 Atendimento automático pausado. Um atendente humano assumirá a conversa em breve._";
-                                
+
                                 if ($usuario) {
                                     try {
                                         $usuario->update(['chat_human_mode' => 1]);
                                         Log::info("Usuário {$phoneContact} ativado para modo humano via webhook.");
-                                    } catch (\Exception $e) { Log::error("Erro ao salvar chat_human_mode: " . $e->getMessage()); }
+                                    } catch (\Exception $e) {
+                                        Log::error("Erro ao salvar chat_human_mode: " . $e->getMessage());
+                                    }
                                 }
                                 Log::info("Usuário {$phoneContact} solicitou transbordo humano com sucesso.");
                             }
@@ -128,30 +132,41 @@ class WhatsAppController extends Controller
                             if (preg_match('/\[RESERVA_PENDENTE:([0-9.]+)\]/', $aiResponse, $matches)) {
                                 $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([0-9.]+)\]/', '', $aiResponse);
                                 Log::info("IA aprovou criação de Reserva Pendente sem PIX para {$phoneContact}");
-                                
+
                                 try {
                                     if (!$usuario) {
                                         $usuario = \App\Models\User::create([
-                                            'name' => $customerName, 
-                                            'email' => $phoneContact.'@arena.com', 
-                                            'whatsapp_contact' => $phoneContact, 
-                                            'password' => bcrypt(uniqid()), 
-                                            'role' => 'customer', 
+                                            'name' => $customerName,
+                                            'email' => $phoneContact . '@arena.com',
+                                            'whatsapp_contact' => $phoneContact,
+                                            'password' => bcrypt(uniqid()),
+                                            'role' => 'customer',
                                             'arena_id' => 1
                                         ]);
                                     }
 
+                                    // 🛠️ CORREÇÃO: Adicionada a coluna 'data'
+                                    $dataAgendamento = date('Y-m-d', strtotime('next saturday'));
                                     \App\Models\Reserva::create([
-                                        'user_id' => $usuario->id, 'arena_id' => 1, 'data_reserva' => date('Y-m-d', strtotime('next saturday')), 'hora_inicio' => '14:00:00', 'hora_fim' => '15:00:00', 'total_price' => 0.00, 'status' => 'pending'
+                                        'user_id' => $usuario->id,
+                                        'arena_id' => 1,
+                                        'data' => $dataAgendamento,          // <-- INSERIDO PARA EVITAR O CRASH DO CAIXA
+                                        'data_reserva' => $dataAgendamento,
+                                        'hora_inicio' => '14:00:00',
+                                        'hora_fim' => '15:00:00',
+                                        'total_price' => 0.00,
+                                        'status' => 'pending'
                                     ]);
                                     Log::info("Reserva salva com sucesso como Pendente para validação.");
-                                } catch (\Exception $e) { Log::error("Erro ao salvar reserva pendente: ".$e->getMessage()); }
+                                } catch (\Exception $e) {
+                                    Log::error("Erro ao salvar reserva pendente: " . $e->getMessage());
+                                }
                             }
 
                             // 🚨 GATILHO C: CANCELAMENTO AUTO ASSISTIDO
                             if (str_contains($aiResponse, '[CANCELAR_RESERVA]')) {
                                 $aiResponse = str_replace('[CANCELAR_RESERVA]', '', $aiResponse);
-                                
+
                                 try {
                                     if ($usuario) {
                                         $ultimaReserva = \App\Models\Reserva::where('user_id', $usuario->id)->where('status', 'confirmed')->orderBy('id', 'desc')->first();
@@ -160,7 +175,9 @@ class WhatsAppController extends Controller
                                             Log::info("Reserva ID {$ultimaReserva->id} alterada para CANCELED com sucesso.");
                                         }
                                     }
-                                } catch (\Exception $e) { Log::error("Erro ao cancelar reserva: ".$e->getMessage()); }
+                                } catch (\Exception $e) {
+                                    Log::error("Erro ao cancelar reserva: " . $e->getMessage());
+                                }
                             }
 
                             // 🎯 GATILHO D: INTERCEPÇÃO TRADICIONAL DO PIX DINÂMICO MERCADO PAGO
@@ -168,42 +185,75 @@ class WhatsAppController extends Controller
                                 $valorPix = $matches[1];
                                 $aiResponse = preg_replace('/\[GERAR_PIX:([0-9.]+)\]/', '', $aiResponse);
 
+                                Log::info("Solicitando PIX ao Mercado Pago no valor de R$ {$valorPix}");
+
                                 $pixData = $this->mercadoPagoService->criarPix($valorPix, "Sinal de Reserva - Arena Elizeu", $customerName, $phoneContact);
 
-                                if ($pixData && isset($pixData['copia_e_cola'])) {
-                                    $aiResponse .= "\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorPix}):*\n\n" . $pixData['copia_e_cola'] . "\n\n_Copie o código acima e efetue o pagamento no app do seu banco para confirmação imediata._";
-                                    
+                                // Logamos o array completo para termos certeza de como o Mercado Pago está respondendo
+                                Log::info("Retorno do Mercado Pago: " . json_encode($pixData));
+
+                                // Mapeamento blindado: procura pela chave correta não importa como o SDK do Mercado Pago retorne
+                                $codigoCopiaECola = $pixData['copia_e_cola'] ?? $pixData['qr_code'] ?? $pixData['pix_copia_e_cola'] ?? null;
+                                $paymentId = $pixData['payment_id'] ?? $pixData['id'] ?? null;
+
+                                if ($codigoCopiaECola) {
+                                    $aiResponse .= "\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorPix}):*\n\n" . $codigoCopiaECola . "\n\n_Copie o código acima e efetue o pagamento no app do seu banco para confirmação imediata._";
+
                                     try {
                                         if (!$usuario) {
                                             $usuario = \App\Models\User::create([
-                                                'name' => $customerName, 
-                                                'email' => $phoneContact.'@arena.com', 
-                                                'whatsapp_contact' => $phoneContact, 
-                                                'password' => bcrypt(uniqid()), 
-                                                'role' => 'customer', 
+                                                'name' => $customerName,
+                                                'email' => $phoneContact . '@arena.com',
+                                                'whatsapp_contact' => $phoneContact,
+                                                'password' => bcrypt(uniqid()),
+                                                'role' => 'customer',
                                                 'arena_id' => 1
                                             ]);
                                         }
 
+                                        // 🛠️ CORREÇÃO: Adicionada a coluna 'data'
+                                        $dataAgendamento = date('Y-m-d', strtotime('next saturday'));
                                         \App\Models\Reserva::create([
-                                            'user_id' => $usuario->id, 'arena_id' => 1, 'data_reserva' => date('Y-m-d', strtotime('next saturday')), 'hora_inicio' => '14:00:00', 'hora_fim' => '15:00:00', 'total_price' => (float)$valorPix, 'status' => 'pending', 'payment_id' => $pixData['payment_id'], 'payment_status' => 'pending'
+                                            'user_id' => $usuario->id,
+                                            'arena_id' => 1,
+                                            'data' => $dataAgendamento,          // <-- INSERIDO PARA EVITAR O CRASH DO CAIXA
+                                            'data_reserva' => $dataAgendamento,
+                                            'hora_inicio' => '14:00:00',
+                                            'hora_fim' => '15:00:00',
+                                            'total_price' => (float)$valorPix,
+                                            'status' => 'pending',
+                                            'payment_id' => $paymentId,
+                                            'payment_status' => 'pending'
                                         ]);
-                                    } catch (\Exception $e) { Log::error("Erro na persistência do PIX: ".$e->getMessage()); }
+                                        Log::info("PIX gerado e Reserva Pendente salva com sucesso! Payment ID: {$paymentId}");
+                                    } catch (\Exception $e) {
+                                        Log::error("Erro na persistência do PIX: " . $e->getMessage());
+                                    }
+                                } else {
+                                    // Se a chave não vier, avisa o cliente para o bot não ficar mudo
+                                    Log::error("Mercado Pago retornou sucesso, mas o Laravel não encontrou a chave do copia e cola.");
+                                    $aiResponse .= "\n\n⚠️ Tivemos uma instabilidade com o banco ao gerar o seu código PIX. Um atendente humano vai te ajudar em instantes.";
                                 }
                             }
 
                             // Envia a resposta final montada para o WhatsApp do Cliente
                             if (trim($aiResponse) !== '[HUMANO_ATIVO]') {
                                 $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
-                                
+
                                 try {
                                     WhatsAppMessage::create([
-                                        'remote_jid' => $phoneContact . '@s.whatsapp.net', 'message' => $aiResponse, 'from_me' => true, 'timestamp' => now()
+                                        'remote_jid' => $phoneContact . '@s.whatsapp.net',
+                                        'message' => $aiResponse,
+                                        'from_me' => true,
+                                        'timestamp' => now()
                                     ]);
-                                } catch (\Exception $e) {}
+                                } catch (\Exception $e) {
+                                }
                             }
                         }
-                    } catch (\Exception $e) { Log::error("Erro fatal no fluxo interno OpenAI: " . $e->getMessage()); }
+                    } catch (\Exception $e) {
+                        Log::error("Erro fatal no fluxo interno OpenAI: " . $e->getMessage());
+                    }
                 }
             }
         }
