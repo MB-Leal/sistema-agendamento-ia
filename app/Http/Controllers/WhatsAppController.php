@@ -59,7 +59,7 @@ class WhatsAppController extends Controller
 
                 if ($phoneContact && $messageText) {
                     
-                    // 🛡️ TRAVA MESTRE: Consulta estritamente via coluna oficial do banco 'whatsapp_contact'
+                    // 🛡️ TRAVA MESTRE: Consulta via coluna oficial do banco 'whatsapp_contact'
                     $usuario = null;
                     try {
                         $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)
@@ -75,6 +75,24 @@ class WhatsAppController extends Controller
                         return response('EVENT_RECEIVED', 200);
                     }
 
+                    // ⏳ 🏁 REGRA DE NEGÓCIO: SESSÃO DE 2 HORAS (EXPIRAÇÃO DE CONVERSA)
+                    // Buscamos a última mensagem registrada desse cliente no banco de dados antes desta entrada
+                    $ultimaMensagemDoBanco = WhatsAppMessage::where('remote_jid', $phoneContact . '@s.whatsapp.net')
+                        ->orderBy('id', 'desc')
+                        ->first();
+
+                    $historicoExpirado = false;
+                    if ($ultimaMensagemDoBanco) {
+                        $horarioUltimaMsg = \Carbon\Carbon::parse($ultimaMensagemDoBanco->timestamp);
+                        $tempoInatividadeEmMinutos = now()->diffInMinutes($horarioUltimaMsg);
+
+                        // Se ficou mais de 120 minutos (2 horas) sem interagir, consideramos a sessão EXPIRADA
+                        if ($tempoInatividadeEmMinutos >= 120) {
+                            Log::info("Sessão expirada para o cliente {$phoneContact}. Tempo de inatividade: {$tempoInatividadeEmMinutos} minutos. Reiniciando fluxo da IA do zero.");
+                            $historicoExpirado = true;
+                        }
+                    }
+
                     // Grava histórico de entrada do cliente no painel
                     try {
                         WhatsAppMessage::create([
@@ -87,7 +105,8 @@ class WhatsAppController extends Controller
 
                     // Processamento inteligente do fluxo OpenAI
                     try {
-                        $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText);
+                        // Passamos o parâmetro $historicoExpirado para o seu serviço da OpenAI saber se limpa as mensagens antigas
+                        $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText, $historicoExpirado);
 
                         if ($aiResponse) {
 
