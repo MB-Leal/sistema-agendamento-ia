@@ -26,7 +26,7 @@ class WhatsAppController extends Controller
         $this->mercadoPagoService = $mercadoPagoService;
     }
 
-   public function handleWebhook(Request $request)
+    public function handleWebhook(Request $request)
     {
         if ($request->isMethod('post')) {
             Log::info('Webhook recebido da Meta! Payload bruto: ' . json_encode($request->all()));
@@ -150,12 +150,14 @@ class WhatsAppController extends Controller
                                     \App\Models\Reserva::create([
                                         'user_id' => $usuario->id,
                                         'arena_id' => 1,
-                                        'data' => $dataAgendamento,          // <-- INSERIDO PARA EVITAR O CRASH DO CAIXA
-                                        'data_reserva' => $dataAgendamento,
-                                        'hora_inicio' => '14:00:00',
-                                        'hora_fim' => '15:00:00',
-                                        'total_price' => 0.00,
-                                        'status' => 'pending'
+                                        'date' => $dataAgendamento,          // Nome correto exigido pelo Reserva.php
+                                        'start_time' => '14:00:00',          // Nome correto da coluna
+                                        'end_time' => '15:00:00',            // Nome correto da coluna
+                                        'price' => (float)$valorPix,         // Preço
+                                        'total_paid' => 0.00,
+                                        'status' => 'pending',
+                                        'payment_id' => $paymentId ?? null,
+                                        'payment_status' => 'pending'
                                     ]);
                                     Log::info("Reserva salva com sucesso como Pendente para validação.");
                                 } catch (\Exception $e) {
@@ -216,13 +218,13 @@ class WhatsAppController extends Controller
                                         \App\Models\Reserva::create([
                                             'user_id' => $usuario->id,
                                             'arena_id' => 1,
-                                            'data' => $dataAgendamento,          // <-- INSERIDO PARA EVITAR O CRASH DO CAIXA
-                                            'data_reserva' => $dataAgendamento,
-                                            'hora_inicio' => '14:00:00',
-                                            'hora_fim' => '15:00:00',
-                                            'total_price' => (float)$valorPix,
+                                            'date' => $dataAgendamento,          // Nome correto exigido pelo Reserva.php
+                                            'start_time' => '14:00:00',          // Nome correto da coluna
+                                            'end_time' => '15:00:00',            // Nome correto da coluna
+                                            'price' => (float)$valorPix,         // Preço
+                                            'total_paid' => 0.00,
                                             'status' => 'pending',
-                                            'payment_id' => $paymentId,
+                                            'payment_id' => $paymentId ?? null,
                                             'payment_status' => 'pending'
                                         ]);
                                         Log::info("PIX gerado e Reserva Pendente salva com sucesso! Payment ID: {$paymentId}");
