@@ -45,7 +45,7 @@
 
                     {{-- 🏟️ CENTRAL MULTI-ATENDIMENTO WHATSAPP WEB INTEGRADO (DESKTOP) --}}
                     <x-nav-link :href="route('admin.whatsapp.chat')" :active="request()->routeIs('admin.whatsapp.*')" class="px-3 py-2 text-sm font-black text-emerald-600 hover:text-emerald-700">
-                        {{ __('🟢 WhatsApp') }}
+                        {{ __('WhatsApp') }}
                     </x-nav-link>
 
                     {{-- 🛡️ TRAVA PARA COLABORADOR --}}
