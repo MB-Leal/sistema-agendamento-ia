@@ -150,6 +150,7 @@ class WhatsAppController extends Controller
                                     \App\Models\Reserva::create([
                                         'user_id' => $usuario->id,
                                         'arena_id' => 1,
+                                        'client_contact' => $phoneContact,
                                         'date' => $dataAgendamento,          // Nome correto exigido pelo Reserva.php
                                         'start_time' => '14:00:00',          // Nome correto da coluna
                                         'end_time' => '15:00:00',            // Nome correto da coluna
@@ -218,6 +219,7 @@ class WhatsAppController extends Controller
                                         \App\Models\Reserva::create([
                                             'user_id' => $usuario->id,
                                             'arena_id' => 1,
+                                            'client_contact' => $phoneContact,
                                             'date' => $dataAgendamento,          // Nome correto exigido pelo Reserva.php
                                             'start_time' => '14:00:00',          // Nome correto da coluna
                                             'end_time' => '15:00:00',            // Nome correto da coluna

@@ -37,8 +37,6 @@ class Reserva extends Model
     protected $fillable = [
         'user_id',
         'arena_id',
-        'data',
-        'data_reserva',
         'manager_id',
         'date',
         'day_of_week',

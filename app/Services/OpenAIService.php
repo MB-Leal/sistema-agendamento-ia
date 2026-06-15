@@ -5,8 +5,8 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\WhatsAppMessage;
-use App\Models\User;      
-use App\Models\Reserva;   
+use App\Models\User;
+use App\Models\Reserva;
 use Carbon\Carbon;
 
 class OpenAIService
@@ -33,12 +33,12 @@ class OpenAIService
         $contextoReservas = "RESERVAS ATIVAS: O cliente não possui agendamentos futuros.";
 
         try {
+            // AQUI FOI APLICADA A CORREÇÃO DO WHATSAPP_CONTACT DO PASSO ANTERIOR
             $user = User::where('whatsapp_contact', $phoneContact)
-            ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
-            ->first();
+                ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
+                ->first();
 
             if ($user) {
-                // 🚨 VERIFICAÇÃO DE TRANSBORDO HUMANO: Se o usuário já estiver em modo humano, a IA avisa o log
                 if (isset($user->chat_human_mode) && $user->chat_human_mode == 1) {
                     Log::info("Cliente {$phoneContact} está em atendimento humano. IA silenciada.");
                     return "[HUMANO_ATIVO]";
@@ -47,20 +47,19 @@ class OpenAIService
                 $nomeCliente = $user->name;
                 $contextoCliente = "STATUS: Cliente Cadastrado Antigo.\nNome: {$nomeCliente}.\nAction: Demonstre que o reconhece.";
 
-                // Busca reservas futuras
                 $reservasAtivas = Reserva::where('user_id', $user->id)
-                    ->whereIn('status', ['pending', 'confirmed']) 
-                    ->where('data_reserva', '>=', Carbon::today()->toDateString())
-                    ->orderBy('data_reserva', 'asc')
+                    ->whereIn('status', ['pending', 'confirmed'])
+                    ->where('date', '>=', Carbon::today()->toDateString()) // <-- Mude aqui
+                    ->orderBy('date', 'asc') // <-- Mude aqui
                     ->get();
 
                 if ($reservasAtivas->count() > 0) {
                     $contextoReservas = "RESERVAS ENCONTRADAS ATIVAS:\n";
                     foreach ($reservasAtivas as $reserva) {
-                        $dataCarb = Carbon::parse($reserva->data_reserva . ' ' . $reserva->hora_inicio);
+                        $dataCarb = Carbon::parse($reserva->date . ' ' . $reserva->start_time); // Ajustado para date e start_time
                         $podeCancelar = Carbon::now()->diffInHours($dataCarb, false) >= 24;
-                        
-                        $contextoReservas .= "- Reserva ID: {$reserva->id} | Data: " . Carbon::parse($reserva->data_reserva)->format('d/m/Y') . " às " . substr($reserva->hora_inicio, 0, 5) . "h | Status do Sistema: {$reserva->status} | ";
+
+                        $contextoReservas .= "- Reserva ID: {$reserva->id} | Data: " . Carbon::parse($reserva->date)->format('d/m/Y') . " às " . substr($reserva->start_time, 0, 5) . "h | Status do Sistema: {$reserva->status} | ";
                         $contextoReservas .= $podeCancelar ? "CANCELAMENTO: Permitido (+24h de antecedência).\n" : "CANCELAMENTO: Proibido (Menos de 24h).\n";
                     }
                 }
@@ -69,40 +68,33 @@ class OpenAIService
             Log::error("Erro no cruzamento de dados: " . $dbEx->getMessage());
         }
 
-        // 2. PROMPT MESTRE COM AS NOVAS DIRETRIZES FLEXÍVEIS
+        // 2. PROMPT MESTRE
         $systemPrompt = "Você é a assistente virtual inteligente e atendente oficial da Arena Elizeu.\n" .
-                        "Você DEVE responder APENAS perguntas sobre agendamentos, horários, cancelamentos e o funcionamento da Arena Elizeu. Se o cliente perguntar qualquer assunto fora disso, recuse educadamente.\n\n" .
-                        "📌 CONTEXTO DO CLIENTE ATUAL:\n" .
-                        "{$contextoCliente}\n" .
-                        "{$contextoReservas}\n\n" .
-                        "🏢 POLÍTICAS DE PAGAMENTO FLEXÍVEIS DA ARENA:\n" .
-                        "1. Sinal Aberto: O valor padrão do sinal é R$ 50,00, mas você pode aceitar QUALQUER VALOR que o cliente propor enviar como sinal.\n" .
-                        "2. Clientes Antigos / Parceiros / 'Pagar na Hora': Se o cliente disser que é amigo do dono, parceiro antigo, ou disser que vai 'pagar na hora do jogo', aceite imediatamente! Diga que vai deixar o horário reservado como pendente e que o gestor confirmará no sistema. Para esse caso, use a tag técnica final [RESERVA_PENDENTE:0.00].\n" .
-                        "3. Sinal em Dinheiro Presencial: Se ele quiser pagar o sinal em dinheiro, explique que ele deve ir presencialmente até o estabelecimento pagar ao gestor para ter o horário confirmado. Use a tag final [RESERVA_PENDENTE:0.00].\n" .
-                        "4. Sinal no Cartão de Crédito/Débito: Explique que a maquininha fica fixa na Arena presencial. Ele deve ir até lá pagar o sinal para o gestor confirmar. Use a tag final [RESERVA_PENDENTE:0.00].\n\n" .
-                        "🎯 REGRA DE INTEGRAÇÃO DO PIX MERCADO PAGO:\n" .
-                        "- Se o cliente fechar o agendamento e optar por pagar o sinal via PIX Copia e Cola, use o valor acordado (seja R$ 50.00 ou outro valor combinado) e anexe obrigatoriamente a tag exata: [GERAR_PIX:VALOR] ao final do texto (Exemplo: [GERAR_PIX:50.00] ou [GERAR_PIX:30.00]).\n\n" .
-                        "⚠️ SOLICITAÇÃO DE ATENDIMENTO HUMANO:\n" .
-                        "- Se o cliente disser explicitamente 'quero falar com um humano', 'chama o atendente', ou demonstrar irritação insolúvel, diga que está repassando para o suporte humano e termine OBRIGATORIAMENTE com a tag: [ATIVAR_HUMANO].\n\n" .
-                        "❌ POLÍTICA DE CANCELAMENTO:\n" .
-                        "- Se o cliente pedir para cancelar: verifique no histórico acima se faltam mais de 24 horas para o jogo. Se tiver MAIS de 24 horas, diga que cancelou o horário no sistema, mas avise que a devolução/estorno do valor do sinal deverá ser tratada diretamente com um atendente humano. Anexe a tag final: [CANCELAR_RESERVA]. Se faltar MENOS de 24 horas, informe que pelas políticas da Arena, não há direito a estorno ou cancelamento.\n\n" .
-                        "Hoje é dia " . date('d/m/Y') . " (Horário: " . date('H:i') . "). Responda com mensagens curtas (até 3 frases).";
+            "Você DEVE responder APENAS perguntas sobre agendamentos, horários, cancelamentos e o funcionamento da Arena Elizeu.\n\n" .
+            "📌 CONTEXTO DO CLIENTE ATUAL:\n{$contextoCliente}\n{$contextoReservas}\n\n" .
+            "⚠️ REGRA DE OURO PARA AGENDAMENTOS:\n" .
+            "Você NUNCA pode confirmar um horário sem ANTES usar a ferramenta 'verificar_disponibilidade'. Se a ferramenta disser que está ocupado, peça desculpas e sugira outro horário. Não invente disponibilidades!\n\n" .
+            "🏢 POLÍTICAS DE PAGAMENTO FLEXÍVEIS DA ARENA:\n" .
+            "1. Sinal Aberto: Valor padrão R$ 50,00, mas aceite o que o cliente propor.\n" .
+            "2. Clientes Antigos / 'Pagar na Hora': Aceite e use a tag [RESERVA_PENDENTE:0.00].\n" .
+            "3. Dinheiro ou Cartão Presencial: Explique a regra e use a tag [RESERVA_PENDENTE:0.00].\n\n" .
+            "🎯 PIX MERCADO PAGO:\n- Se for PIX Copia e Cola, use a tag [GERAR_PIX:VALOR] ao final (Ex: [GERAR_PIX:50.00]).\n\n" .
+            "⚠️ ATENDIMENTO HUMANO: Se irritado ou pedir humano, use a tag [ATIVAR_HUMANO].\n\n" .
+            "❌ CANCELAMENTO: Mais de 24h: [CANCELAR_RESERVA]. Menos de 24h: Proibido.\n\n" .
+            "Hoje é dia " . date('d/m/Y') . " (Horário: " . date('H:i') . "). Responda de forma natural, amigável e curta.";
 
-        // 3. RECUPERAÇÃO DA MEMÓRIA TEXTUAL
+        // 3. RECUPERAÇÃO DA MEMÓRIA
         $historyMessages = [];
         try {
             $targetJid = $phoneContact . '@s.whatsapp.net';
             $rawLogs = WhatsAppMessage::where('remote_jid', $targetJid)
                 ->orderBy('id', 'desc')
-                ->limit(10)
+                ->limit(8)
                 ->get()
                 ->reverse();
 
             foreach ($rawLogs as $log) {
-                // Se a última mensagem salvou que o humano está ativo, para o fluxo aqui
-                if ($log->message === '[HUMANO_ATIVO]') {
-                    return "[HUMANO_ATIVO]";
-                }
+                if ($log->message === '[HUMANO_ATIVO]') return "[HUMANO_ATIVO]";
                 $role = $log->from_me ? 'assistant' : 'user';
                 $historyMessages[] = ['role' => $role, 'content' => $log->message];
             }
@@ -110,8 +102,7 @@ class OpenAIService
             Log::error("Erro no histórico: " . $e->getMessage());
         }
 
-        $messagesPayload = [];
-        $messagesPayload[] = ['role' => 'system', 'content' => $systemPrompt];
+        $messagesPayload = [['role' => 'system', 'content' => $systemPrompt]];
         foreach ($historyMessages as $pastMessage) {
             $messagesPayload[] = $pastMessage;
         }
@@ -121,18 +112,99 @@ class OpenAIService
             $messagesPayload[] = ['role' => 'user', 'content' => $customerMessage];
         }
 
-        // 4. CHAMADA OPENAI
+        // 4. DEFINIÇÃO DA FERRAMENTA (TOOLS) PARA A IA CONSULTAR O BANCO
+        $tools = [
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'verificar_disponibilidade',
+                    'description' => 'Verifica no banco de dados se um horário específico está disponível para locação.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'data' => ['type' => 'string', 'description' => 'A data do agendamento no formato YYYY-MM-DD'],
+                            'hora' => ['type' => 'string', 'description' => 'A hora do agendamento no formato HH:MM']
+                        ],
+                        'required' => ['data', 'hora']
+                    ]
+                ]
+            ]
+        ];
+
+        // 5. PRIMEIRA CHAMADA OPENAI
         $response = Http::withToken($this->apiKey)->post($this->apiUrl, [
             'model' => 'gpt-4o-mini',
             'messages' => $messagesPayload,
+            'tools' => $tools,
             'temperature' => 0.2
         ]);
 
-        if ($response->successful()) {
-            $data = $response->json();
-            return trim($data['choices'][0]['message']['content'] ?? '');
+        if (!$response->successful()) {
+            return "Desculpe, tive um probleminha técnico. Pode repetir?";
         }
 
-        return "Desculpe, tive um probleminha técnico. Pode repetir?";
+        $responseData = $response->json();
+        $message = $responseData['choices'][0]['message'];
+
+        // 6. VERIFICA SE A IA DECIDIU CHAMAR A FERRAMENTA
+        if (isset($message['tool_calls'])) {
+            $messagesPayload[] = $message; // Adiciona a decisão da IA no histórico temporário
+
+            foreach ($message['tool_calls'] as $toolCall) {
+                if ($toolCall['function']['name'] === 'verificar_disponibilidade') {
+                    $args = json_decode($toolCall['function']['arguments'], true);
+
+                    // Chama a função interna do PHP para bater no banco de dados
+                    $resultadoDB = $this->checarBancoDeDados($args['data'], $args['hora']);
+
+                    // Devolve a resposta do banco para a IA
+                    $messagesPayload[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $toolCall['id'],
+                        'content' => $resultadoDB
+                    ];
+                }
+            }
+
+            // 7. SEGUNDA CHAMADA OPENAI (Agora a IA tem a resposta do banco e pode responder ao cliente)
+            $secondResponse = Http::withToken($this->apiKey)->post($this->apiUrl, [
+                'model' => 'gpt-4o-mini',
+                'messages' => $messagesPayload,
+                'temperature' => 0.2
+            ]);
+
+            if ($secondResponse->successful()) {
+                $secondData = $secondResponse->json();
+                return trim($secondData['choices'][0]['message']['content'] ?? '');
+            }
+        }
+
+        // Se não precisou chamar ferramenta, retorna a mensagem normal
+        return trim($message['content'] ?? '');
+    }
+
+    /**
+     * Função auxiliar para checar a disponibilidade no banco real
+     */
+    private function checarBancoDeDados($data, $hora): string
+    {
+        try {
+            // Formata a hora para bater com o banco (ex: 12:00 -> 12:00:00)
+            $horaFormatada = Carbon::parse($hora)->format('H:i:s');
+
+            $ocupado = Reserva::where('date', $data)
+                ->where('start_time', $horaFormatada)
+                ->whereIn('status', ['pending', 'confirmed'])
+                ->exists();
+
+            if ($ocupado) {
+                return "O horário das {$hora} no dia {$data} está OCUPADO. Diga ao cliente que já existe uma reserva e peça para escolher outro horário.";
+            }
+
+            return "O horário das {$hora} no dia {$data} está LIVRE. Você pode prosseguir com a confirmação e gerar a tag de pagamento.";
+        } catch (\Exception $e) {
+            Log::error("Erro na verificação de disponibilidade: " . $e->getMessage());
+            return "Ocorreu um erro no sistema ao verificar. Peça para o cliente aguardar um momento.";
+        }
     }
 }
