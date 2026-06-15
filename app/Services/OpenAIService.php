@@ -78,7 +78,7 @@ class OpenAIService
             "1. Sinal Aberto: Valor padrão R$ 50,00, mas aceite o que o cliente propor.\n" .
             "2. Clientes Antigos / 'Pagar na Hora': Aceite e use a tag [RESERVA_PENDENTE:0.00].\n" .
             "3. Dinheiro ou Cartão Presencial: Explique a regra e use a tag [RESERVA_PENDENTE:0.00].\n\n" .
-            "🎯 PIX MERCADO PAGO:\n- Se for PIX Copia e Cola, use a tag [GERAR_PIX:VALOR] ao final (Ex: [GERAR_PIX:50.00]).\n\n" .
+            "- Se o cliente fechar o agendamento... use a tag [GERAR_PIX:VALOR:DATA:HORA] (Exemplo: [GERAR_PIX:50.00:2026-06-16:08:00]).\n\n".
             "⚠️ ATENDIMENTO HUMANO: Se irritado ou pedir humano, use a tag [ATIVAR_HUMANO].\n\n" .
             "❌ CANCELAMENTO: Mais de 24h: [CANCELAR_RESERVA]. Menos de 24h: Proibido.\n\n" .
             "Hoje é dia " . date('d/m/Y') . " (Horário: " . date('H:i') . "). Responda de forma natural, amigável e curta.";
