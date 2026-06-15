@@ -102,8 +102,8 @@ class WebhookMercadoPagoController extends Controller
                 $whatsAppService = app(WhatsAppService::class);
                 
                 // Formata a data para ficar bonita na mensagem (Ex: 13/06/2026)
-                $dataFormatada = date('d/m/Y', strtotime($reserva->data_reserva));
-                $horaInicio = substr($reserva->hora_inicio, 0, 5);
+                $dataFormatada = date('d/m/Y', strtotime($reserva->date));
+                $horaInicio = substr($reserva->start_time, 0, 5);
 
                 $mensagemSucesso = "⚽ *PAGAMENTO CONFIRMADO!* ⚽\n\n" .
                                    "Olá, *{$usuario->name}*!\n" .

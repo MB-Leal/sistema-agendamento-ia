@@ -50,6 +50,7 @@ class Reserva extends Model
         'total_paid',
         'payment_status',
         'payment_method',
+        'payment_id',
         'client_name',
         'client_contact',
         'notes',

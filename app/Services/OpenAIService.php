@@ -33,9 +33,9 @@ class OpenAIService
         $contextoReservas = "RESERVAS ATIVAS: O cliente não possui agendamentos futuros.";
 
         try {
-            $user = User::where('phone_number', $phoneContact)
-                        ->orWhere('telefone', $phoneContact)
-                        ->first();
+            $user = User::where('whatsapp_contact', $phoneContact)
+            ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
+            ->first();
 
             if ($user) {
                 // 🚨 VERIFICAÇÃO DE TRANSBORDO HUMANO: Se o usuário já estiver em modo humano, a IA avisa o log
