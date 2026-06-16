@@ -8,15 +8,14 @@ use App\Models\WhatsAppMessage;
 use App\Services\WhatsAppService;
 use App\Services\OpenAIService;
 use Carbon\Carbon;
-use App\Services\MercadoPagoService; // 🚀 Importado a nova Service Nativa
+use App\Services\MercadoPagoService;
 
 class WhatsAppController extends Controller
 {
     protected $whatsAppService;
     protected $openAIService;
-    protected $mercadoPagoService; // 🚀 Adicionado propriedade
+    protected $mercadoPagoService;
 
-    // O Laravel injeta os três serviços automaticamente aqui no construtor
     public function __construct(
         WhatsAppService $whatsAppService,
         OpenAIService $openAIService,
@@ -29,10 +28,6 @@ class WhatsAppController extends Controller
 
     public function handleWebhook(Request $request)
     {
-        if ($request->isMethod('post')) {
-            Log::info('Webhook recebido da Meta! Payload bruto: ' . json_encode($request->all()));
-        }
-
         // 1. VALIDAÇÃO DO WEBHOOK (GET)
         if ($request->isMethod('get')) {
             $mode = $request->query('hub_mode');
@@ -59,14 +54,26 @@ class WhatsAppController extends Controller
 
                 if ($phoneContact && $messageText) {
                     
-                    // 🛡️ BUSCA DE USUÁRIO
+                    // 🛡️ BUSCA DE USUÁRIO E CRIAÇÃO CASO NÃO EXISTA
                     $usuario = null;
                     try {
                         $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)
                             ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
                             ->first();
+                            
+                        // Se não existe, já cria na hora para garantir a Foreign Key
+                        if (!$usuario) {
+                            $usuario = \App\Models\User::create([
+                                'name' => $customerName,
+                                'email' => $phoneContact . '@arena.com',
+                                'whatsapp_contact' => $phoneContact,
+                                'password' => bcrypt(uniqid()),
+                                'role' => 'customer',
+                                'arena_id' => 1
+                            ]);
+                        }
                     } catch (\Exception $e) {
-                        Log::error("Erro no cruzamento de dados: " . $e->getMessage());
+                        Log::error("Erro ao buscar/criar usuário: " . $e->getMessage());
                     }
 
                     if ($usuario && isset($usuario->chat_human_mode) && $usuario->chat_human_mode == 1) {
@@ -87,62 +94,106 @@ class WhatsAppController extends Controller
 
                     // Processamento OpenAI
                     try {
-                        $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText, false);
+                        $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText);
 
                         if ($aiResponse) {
-                            // 🚨 AÇÕES DE FLUXO (TRANSBORDO, PENDENTE, CANCELAR)
+                            
+                            // 🚨 GATILHO: TRANSBORDO PARA ATENDENTE HUMANO
                             if (str_contains($aiResponse, '[ATIVAR_HUMANO]')) {
                                 $aiResponse = str_replace('[ATIVAR_HUMANO]', '', $aiResponse);
-                                $aiResponse .= "\n\n_🤖 Atendimento humano ativado._";
+                                $aiResponse .= "\n\n_🤖 Atendimento automático pausado. Um atendente assumirá em breve._";
                                 if ($usuario) $usuario->update(['chat_human_mode' => 1]);
                             }
 
-                            if (preg_match('/\[RESERVA_PENDENTE:([0-9.]+)\]/', $aiResponse, $matches)) {
-                                $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([0-9.]+)\]/', '', $aiResponse);
-                                // ... Lógica de Reserva Pendente aqui ...
+                            // 🚨 GATILHO: RESERVA PENDENTE (Dinheiro ou Cartão)
+                            if (preg_match('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', $aiResponse, $matches)) {
+                                $valorSinal = $matches[1];
+                                $dataAg = $matches[2];
+                                $horaAg = $matches[3];
+                                $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
+                                
+                                // Checa se já existe reserva para evitar duplicação
+                                $reservaExistente = \App\Models\Reserva::whereDate('date', $dataAg)
+                                    ->where('start_time', $horaAg . ':00')
+                                    ->whereIn('status', ['pending', 'confirmed'])
+                                    ->first();
+
+                                if (!$reservaExistente) {
+                                    \App\Models\Reserva::create([
+                                        'user_id' => $usuario->id,
+                                        'arena_id' => 1,
+                                        'client_contact' => $phoneContact,
+                                        'date' => $dataAg,
+                                        'start_time' => $horaAg . ':00',
+                                        'end_time' => date('H:i:s', strtotime($horaAg . ' +1 hour')),
+                                        'price' => (float)$valorSinal,
+                                        'status' => 'pending',
+                                        'payment_status' => 'pending'
+                                    ]);
+                                }
                             }
 
-                            // 🎯 PIX DINÂMICO
+                            // 🎯 GATILHO: PIX DINÂMICO
                             if (preg_match('/\[GERAR_PIX:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', $aiResponse, $matches)) {
                                 $valorPix = $matches[1];
                                 $dataAgendamento = $matches[2];
                                 $horaAgendamento = $matches[3];
                                 $aiResponse = preg_replace('/\[GERAR_PIX:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
 
-                                $pixData = $this->mercadoPagoService->criarPix($valorPix, "Sinal - Arena Elizeu", $customerName, $phoneContact);
-                                $codigoCopiaECola = $pixData['copia_e_cola'] ?? null;
-                                $paymentId = $pixData['payment_id'] ?? null;
+                                // Checagem Antispam: Se já existe reserva neste horário para este cliente
+                                $reservaExistente = \App\Models\Reserva::where('user_id', $usuario->id)
+                                    ->whereDate('date', $dataAgendamento)
+                                    ->where('start_time', $horaAgendamento . ':00')
+                                    ->whereIn('status', ['pending'])
+                                    ->first();
 
-                                if ($codigoCopiaECola) {
-                                    $aiResponse .= "\n\n🔑 *PIX:* " . $codigoCopiaECola;
-                                    
-                                    if (!$usuario) {
-                                        $usuario = \App\Models\User::create([
-                                            'name' => $customerName,
-                                            'whatsapp_contact' => $phoneContact,
-                                            'password' => bcrypt(uniqid()),
-                                            'role' => 'customer'
+                                if ($reservaExistente && $reservaExistente->payment_id) {
+                                    $aiResponse .= "\n\n⚠️ Você já possui uma reserva aguardando pagamento para este horário. Verifique a chave PIX enviada anteriormente ou fale com um atendente.";
+                                } else {
+                                    // Gera PIX apenas se não existir
+                                    $pixData = $this->mercadoPagoService->criarPix($valorPix, "Sinal - Arena Elizeu", $customerName, $phoneContact);
+                                    $codigoCopiaECola = $pixData['copia_e_cola'] ?? null;
+                                    $paymentId = $pixData['payment_id'] ?? null;
+
+                                    if ($codigoCopiaECola) {
+                                        // Formatação amigável
+                                        $aiResponse .= "\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorPix}):*\n\n";
+                                        $aiResponse .= "```{$codigoCopiaECola}
+```\n\n";
+                                        $aiResponse .= "⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._";
+                                        
+                                        \App\Models\Reserva::create([
+                                            'user_id' => $usuario->id,
+                                            'arena_id' => 1,
+                                            'client_contact' => $phoneContact,
+                                            'date' => $dataAgendamento,
+                                            'start_time' => $horaAgendamento . ':00',
+                                            'end_time' => date('H:i:s', strtotime($horaAgendamento . ' +1 hour')),
+                                            'price' => (float)$valorPix,
+                                            'status' => 'pending',
+                                            'payment_id' => $paymentId,
+                                            'payment_status' => 'pending'
                                         ]);
+                                    } else {
+                                        $aiResponse .= "\n\n⚠️ Tivemos uma instabilidade ao gerar o PIX. Um atendente vai te ajudar em instantes.";
                                     }
-
-                                    \App\Models\Reserva::create([
-                                        'user_id' => $usuario->id,
-                                        'arena_id' => 1,
-                                        'client_contact' => $phoneContact,
-                                        'date' => $dataAgendamento,
-                                        'start_time' => $horaAgendamento . ':00',
-                                        'end_time' => date('H:i:s', strtotime($horaAgendamento . ' +1 hour')),
-                                        'price' => (float)$valorPix,
-                                        'status' => 'pending',
-                                        'payment_id' => $paymentId,
-                                        'payment_status' => 'pending'
-                                    ]);
                                 }
                             }
 
                             // Envio final
-                            if (trim($aiResponse) !== '[HUMANO_ATIVO]') {
+                            if (trim($aiResponse) !== '[HUMANO_ATIVO]' && !empty(trim($aiResponse))) {
                                 $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
+                                
+                                try {
+                                    WhatsAppMessage::create([
+                                        'remote_jid' => $phoneContact . '@s.whatsapp.net',
+                                        'message' => $aiResponse,
+                                        'from_me' => true,
+                                        'timestamp' => now()
+                                    ]);
+                                } catch (\Exception $e) {
+                                    Log::error("Erro log bot: " . $e->getMessage());
+                                }
                             }
                         }
                     } catch (\Exception $e) {
