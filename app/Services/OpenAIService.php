@@ -55,14 +55,18 @@ class OpenAIService
                 if ($reservasAtivas->count() > 0) {
                     $contextoReservas = "RESERVAS ENCONTRADAS ATIVAS:\n";
                     foreach ($reservasAtivas as $reserva) {
-                        // CORREÇÃO DO ERRO 'Double date specification'
-                        $dataOnly = Carbon::parse($reserva->date)->format('Y-m-d');
-                        $timeOnly = Carbon::parse($reserva->start_time)->format('H:i:s');
-                        $dataCarb = Carbon::parse($dataOnly . ' ' . $timeOnly);
-                        
-                        $podeCancelar = Carbon::now()->diffInHours($dataCarb, false) >= 24;
 
-                        $contextoReservas .= "- Reserva ID: {$reserva->id} | Data: " . Carbon::parse($reserva->date)->format('d/m/Y') . " às {$horaFormatada}h | Status do Sistema: {$reserva->status} | ";
+                        // 1. DECLARAMOS A VARIÁVEL AQUI (Isso resolve o erro Undefined Variable)
+                        $horaFormatada = \Carbon\Carbon::parse($reserva->start_time)->format('H:i');
+
+                        // 2. Extraímos a data e remontamos para calcular a regra de 24h sem dar erro de "Double date"
+                        $dataOnly = \Carbon\Carbon::parse($reserva->date)->format('Y-m-d');
+                        $dataCarb = \Carbon\Carbon::parse($dataOnly . ' ' . $horaFormatada . ':00');
+
+                        $podeCancelar = \Carbon\Carbon::now()->diffInHours($dataCarb, false) >= 24;
+
+                        // 3. Montamos a string usando a variável que criamos
+                        $contextoReservas .= "- Reserva ID: {$reserva->id} | Data: " . \Carbon\Carbon::parse($reserva->date)->format('d/m/Y') . " às {$horaFormatada}h | Status do Sistema: {$reserva->status} | ";
                         $contextoReservas .= $podeCancelar ? "CANCELAMENTO: Permitido (+24h de antecedência).\n" : "CANCELAMENTO: Proibido (Menos de 24h).\n";
                     }
                 }
@@ -80,7 +84,7 @@ class OpenAIService
             "PASSO 1: Pergunte qual data e horário o cliente deseja.\n" .
             "PASSO 2: Assim que o cliente disser a data/hora, OBRIGATORIAMENTE use a ferramenta 'verificar_disponibilidade'. Não invente vagas.\n" .
             "PASSO 3: Se estiver OCUPADO, informe e sugira outro horário. Se estiver LIVRE, avise que está livre e vá para o Passo 4.\n" .
-            "PASSO 4: Informe que para garantir a reserva é necessário um SINAL (sugira R$ 50,00, mas pergunte se ele concorda ou prefere dar outro valor). Pergunte COMO ele deseja pagar o sinal: via PIX (envio a chave Copia e Cola aqui), ou em Dinheiro/Cartão (neste caso, informe que ele deve ir presencialmente na Arena pagar antes do jogo).\n" .
+            "PASSO 4: Informe que para garantir a reserva pedimos um SINAL. Sugira o valor de R$ 50,00, mas deixe MUITO CLARO que ele pode dar o valor que quiser (como R$ 20, R$ 10, ou até R$ 0,00 caso vá pagar tudo na hora do jogo). Pergunte qual valor ele quer dar de sinal e COMO deseja pagar: via PIX (envio a chave Copia e Cola), ou em Dinheiro/Cartão (pagamento presencial na Arena).\n" .
             "PASSO 5: AGUARDE o cliente responder a forma de pagamento e o valor.\n" .
             "PASSO 6 (FINALIZAÇÃO): APENAS DEPOIS que o cliente confirmar o pagamento e o valor, insira a tag apropriada no final da sua mensagem.\n" .
             "========================================\n\n" .
