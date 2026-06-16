@@ -62,7 +62,7 @@ class OpenAIService
                         
                         $podeCancelar = Carbon::now()->diffInHours($dataCarb, false) >= 24;
 
-                        $contextoReservas .= "- Reserva ID: {$reserva->id} | Data: " . Carbon::parse($reserva->date)->format('d/m/Y') . " às " . substr($reserva->start_time, 0, 5) . "h | Status do Sistema: {$reserva->status} | ";
+                        $contextoReservas .= "- Reserva ID: {$reserva->id} | Data: " . Carbon::parse($reserva->date)->format('d/m/Y') . " às {$horaFormatada}h | Status do Sistema: {$reserva->status} | ";
                         $contextoReservas .= $podeCancelar ? "CANCELAMENTO: Permitido (+24h de antecedência).\n" : "CANCELAMENTO: Proibido (Menos de 24h).\n";
                     }
                 }
