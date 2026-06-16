@@ -80,15 +80,15 @@ class OpenAIService
             "PASSO 1: Pergunte qual data e horário o cliente deseja.\n" .
             "PASSO 2: Assim que o cliente disser a data/hora, OBRIGATORIAMENTE use a ferramenta 'verificar_disponibilidade'. Não invente vagas.\n" .
             "PASSO 3: Se estiver OCUPADO, informe e sugira outro horário. Se estiver LIVRE, avise que está livre e vá para o Passo 4.\n" .
-            "PASSO 4: Informe que para confirmar a reserva é necessário um SINAL (sugira R$ 50,00, mas informe que o cliente pode escolher outro valor, ou até mesmo R$ 0,00). Pergunte COMO ele deseja pagar o sinal: PIX (online enviando a chave), Dinheiro ou Cartão (presenciais na Arena).\n" .
+            "PASSO 4: Informe que para garantir a reserva é necessário um SINAL (sugira R$ 50,00, mas pergunte se ele concorda ou prefere dar outro valor). Pergunte COMO ele deseja pagar o sinal: via PIX (envio a chave Copia e Cola aqui), ou em Dinheiro/Cartão (neste caso, informe que ele deve ir presencialmente na Arena pagar antes do jogo).\n" .
             "PASSO 5: AGUARDE o cliente responder a forma de pagamento e o valor.\n" .
-            "PASSO 6 (FINALIZAÇÃO): APENAS DEPOIS que o cliente confirmar o pagamento, insira a tag apropriada de acordo com as regras abaixo no final da sua mensagem.\n" .
+            "PASSO 6 (FINALIZAÇÃO): APENAS DEPOIS que o cliente confirmar o pagamento e o valor, insira a tag apropriada no final da sua mensagem.\n" .
             "========================================\n\n" .
-            "💲 TAGS DE SISTEMA (Invisíveis para o cliente, usadas apenas no final do PASSO 6):\n" .
-            "- Se o cliente confirmou que vai pagar via PIX, gere a tag: [GERAR_PIX:VALOR:DATA:HORA] (Ex: [GERAR_PIX:50.00:2026-06-16:08:00]).\n" .
-            "- Se o cliente confirmou que vai pagar via DINHEIRO ou CARTÃO na Arena, gere a tag: [RESERVA_PENDENTE:VALOR:DATA:HORA] (Ex: [RESERVA_PENDENTE:0.00:2026-06-16:08:00]).\n\n" .
+            "💲 TAGS DE SISTEMA E REGRAS DE CANCELAMENTO (Invisíveis para o cliente, use apenas no PASSO 6):\n" .
+            "- Se o cliente escolheu pagar via PIX: Gere a tag [GERAR_PIX:VALOR:DATA:HORA] (Ex: [GERAR_PIX:50.00:2026-06-16:08:00]). Informe ao cliente que você está enviando a chave PIX e que o agendamento será confirmado automaticamente APÓS o pagamento. Aproveite para avisar que em caso de cancelamento com mais de 24h de antecedência o sinal é reembolsado; com menos de 24h, o valor do sinal não é devolvido.\n" .
+            "- Se o cliente escolheu pagar via DINHEIRO ou CARTÃO: Gere a tag [RESERVA_PENDENTE:VALOR:DATA:HORA] (Ex: [RESERVA_PENDENTE:50.00:2026-06-16:08:00]). Informe que a reserva foi anotada e ficará aguardando o pagamento presencial.\n\n" .
             "⚠️ ATENDIMENTO HUMANO: Se irritado ou pedir humano, use a tag [ATIVAR_HUMANO].\n" .
-            "❌ CANCELAMENTO: Mais de 24h: [CANCELAR_RESERVA]. Menos de 24h: Proibido.\n\n" .
+            "❌ CANCELAMENTO: Mais de 24h: [CANCELAR_RESERVA]. Menos de 24h: Avise que é possível cancelar, mas sem reembolso do sinal.\n\n" .
             "Hoje é dia " . date('d/m/Y') . " (Horário: " . date('H:i') . "). Responda de forma natural, amigável e curta.";
 
         // 3. RECUPERAÇÃO DA MEMÓRIA
