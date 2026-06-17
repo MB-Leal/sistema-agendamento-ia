@@ -99,11 +99,13 @@ class WebhookMercadoPagoController extends Controller
             $usuario = $reserva->user;
 
             if ($usuario && !empty($usuario->whatsapp_contact)) {
-                $whatsAppService = app(WhatsAppService::class);
+                $whatsAppService = app(\App\Services\WhatsAppService::class);
                 
                 // Formata a data para ficar bonita na mensagem (Ex: 13/06/2026)
                 $dataFormatada = date('d/m/Y', strtotime($reserva->date));
-                $horaInicio = substr($reserva->start_time, 0, 5);
+                
+                // 🛡️ CORREÇÃO: Usando Carbon para extrair a hora com precisão absoluta
+                $horaInicio = \Carbon\Carbon::parse($reserva->start_time)->format('H:i');
 
                 $mensagemSucesso = "⚽ *PAGAMENTO CONFIRMADO!* ⚽\n\n" .
                                    "Olá, *{$usuario->name}*!\n" .
@@ -114,10 +116,10 @@ class WebhookMercadoPagoController extends Controller
                                    "_Obrigado pela preferência, bom jogo!_";
 
                 $whatsAppService->sendMessage($usuario->whatsapp_contact, $mensagemSucesso);
-                Log::info("Notificação de confirmação enviada com sucesso para o WhatsApp: {$usuario->whatsapp_contact}");
+                \Illuminate\Support\Facades\Log::info("Notificação de confirmação enviada com sucesso para o WhatsApp: {$usuario->whatsapp_contact}");
             }
         } catch (\Exception $e) {
-            Log::error("Erro ao enviar notificação de sucesso no WhatsApp: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("Erro ao enviar notificação de sucesso no WhatsApp: " . $e->getMessage());
         }
     }
 }
