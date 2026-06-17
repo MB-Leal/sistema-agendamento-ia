@@ -103,9 +103,9 @@ class WhatsAppChatController extends Controller
         ]);
 
         // 3. 🎯 CORREÇÃO DA REGRA DE NEGÓCIO: Desativa o modo humano usando a coluna real 'whatsapp_contact'
-        User::where('whatsapp_contact', $purePhone)
+        /*User::where('whatsapp_contact', $purePhone)
             ->orWhere('whatsapp_contact', 'like', '%' . substr($purePhone, -8))
-            ->update(['chat_human_mode' => 0]);
+            ->update(['chat_human_mode' => 0]); */
 
         return redirect()->back()->with('success', 'Mensagem enviada!');
     }
