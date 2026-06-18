@@ -112,6 +112,9 @@ class WhatsAppController extends Controller
                                 $horaAg = $matches[3];
                                 $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
                                 
+
+                                $precoPadrao = \Illuminate\Support\Facades\DB::table('arena_configurations')->where('arena_id', 1)->value('default_price') ?? 100.00;
+
                                 // Checa se já existe reserva para evitar duplicação
                                 $reservaExistente = \App\Models\Reserva::whereDate('date', $dataAg)
                                     ->where('start_time', $horaAg . ':00')
@@ -126,7 +129,7 @@ class WhatsAppController extends Controller
                                         'date' => $dataAg,
                                         'start_time' => $horaAg . ':00',
                                         'end_time' => date('H:i:s', strtotime($horaAg . ' +1 hour')),
-                                        'price' => (float)$valorSinal,
+                                        'price' => (float)$precoPadrao,
                                         'status' => 'pending',
                                         'payment_status' => 'pending'
                                     ]);
@@ -139,6 +142,9 @@ class WhatsAppController extends Controller
                                 $dataAgendamento = $matches[2];
                                 $horaAgendamento = $matches[3];
                                 $aiResponse = preg_replace('/\[GERAR_PIX:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
+
+                                // 🛡️ CORREÇÃO: Pega o preço padrão da quadra (Se não achar, usa 100.00 como fallback)
+                                $precoPadrao = \Illuminate\Support\Facades\DB::table('arena_configurations')->where('arena_id', 1)->value('default_price') ?? 100.00;
 
                                 // Checagem Antispam: Se já existe reserva neste horário para este cliente
                                 $reservaExistente = \App\Models\Reserva::where('user_id', $usuario->id)
@@ -169,7 +175,7 @@ class WhatsAppController extends Controller
                                             'date' => $dataAgendamento,
                                             'start_time' => $horaAgendamento . ':00',
                                             'end_time' => date('H:i:s', strtotime($horaAgendamento . ' +1 hour')),
-                                            'price' => (float)$valorPix,
+                                            'price' => (float)$precoPadrao,
                                             'status' => 'pending',
                                             'payment_id' => $paymentId,
                                             'payment_status' => 'pending'
