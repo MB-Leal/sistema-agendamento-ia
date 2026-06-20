@@ -53,14 +53,14 @@ class WhatsAppController extends Controller
                 $messageText = $messageData['text']['body'] ?? null;
 
                 if ($phoneContact && $messageText) {
-                    
+
                     // 🛡️ BUSCA DE USUÁRIO E CRIAÇÃO CASO NÃO EXISTA
                     $usuario = null;
                     try {
                         $usuario = \App\Models\User::where('whatsapp_contact', $phoneContact)
                             ->orWhere('whatsapp_contact', 'like', '%' . substr($phoneContact, -8))
                             ->first();
-                            
+
                         // Se não existe, já cria na hora para garantir a Foreign Key
                         if (!$usuario) {
                             $usuario = \App\Models\User::create([
@@ -97,12 +97,54 @@ class WhatsAppController extends Controller
                         $aiResponse = $this->openAIService->getAIResponse($phoneContact, $messageText);
 
                         if ($aiResponse) {
-                            
+
                             // 🚨 GATILHO: TRANSBORDO PARA ATENDENTE HUMANO
                             if (str_contains($aiResponse, '[ATIVAR_HUMANO]')) {
                                 $aiResponse = str_replace('[ATIVAR_HUMANO]', '', $aiResponse);
                                 $aiResponse .= "\n\n_🤖 Atendimento automático pausado. Um atendente assumirá em breve._";
                                 if ($usuario) $usuario->update(['chat_human_mode' => 1]);
+                            }
+
+                            // 🚨 GATILHO: CANCELAR RESERVA
+                            if (preg_match('/\[CANCELAR_RESERVA:(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', $aiResponse, $matches)) {
+                                $dataCancelamento = $matches[1];
+                                $horaCancelamento = $matches[2];
+
+                                $aiResponse = preg_replace('/\[CANCELAR_RESERVA:(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
+
+                                $reservaParaCancelar = \App\Models\Reserva::where('user_id', $usuario->id)
+                                    ->whereDate('date', $dataCancelamento)
+                                    ->where('start_time', $horaCancelamento . ':00')
+                                    ->whereIn('status', ['pending', 'confirmed'])
+                                    ->first();
+
+                                if ($reservaParaCancelar) {
+                                    $reservaParaCancelar->status = 'cancelled'; // Se no seu banco for 'canceled' (com um L), mude aqui!
+                                    $reservaParaCancelar->save();
+                                }
+                            }
+
+                            // 🚨 GATILHO: REAGENDAR RESERVA
+                            if (preg_match('/\[REAGENDAR_RESERVA:(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2}):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', $aiResponse, $matches)) {
+                                $dataAntiga = $matches[1];
+                                $horaAntiga = $matches[2];
+                                $novaData = $matches[3];
+                                $novaHora = $matches[4];
+
+                                $aiResponse = preg_replace('/\[REAGENDAR_RESERVA:(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2}):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
+
+                                $reservaParaEditar = \App\Models\Reserva::where('user_id', $usuario->id)
+                                    ->whereDate('date', $dataAntiga)
+                                    ->where('start_time', $horaAntiga . ':00')
+                                    ->whereIn('status', ['pending', 'confirmed'])
+                                    ->first();
+
+                                if ($reservaParaEditar) {
+                                    $reservaParaEditar->date = $novaData;
+                                    $reservaParaEditar->start_time = $novaHora . ':00';
+                                    $reservaParaEditar->end_time = date('H:i:s', strtotime($novaHora . ' +1 hour'));
+                                    $reservaParaEditar->save();
+                                }
                             }
 
                             // 🚨 GATILHO: RESERVA PENDENTE (Dinheiro ou Cartão)
@@ -111,7 +153,7 @@ class WhatsAppController extends Controller
                                 $dataAg = $matches[2];
                                 $horaAg = $matches[3];
                                 $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
-                                
+
 
                                 $precoPadrao = \Illuminate\Support\Facades\DB::table('arena_configurations')->where('arena_id', 1)->value('default_price') ?? 100.00;
 
@@ -167,7 +209,7 @@ class WhatsAppController extends Controller
                                         $aiResponse .= "```{$codigoCopiaECola}
 ```\n\n";
                                         $aiResponse .= "⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._";
-                                        
+
                                         \App\Models\Reserva::create([
                                             'user_id' => $usuario->id,
                                             'arena_id' => 1,
@@ -189,7 +231,7 @@ class WhatsAppController extends Controller
                             // Envio final
                             if (trim($aiResponse) !== '[HUMANO_ATIVO]' && !empty(trim($aiResponse))) {
                                 $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
-                                
+
                                 try {
                                     WhatsAppMessage::create([
                                         'remote_jid' => $phoneContact . '@s.whatsapp.net',
