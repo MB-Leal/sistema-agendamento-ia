@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use \Illuminate\Support\Facades\DB;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsAppService;
 use App\Services\OpenAIService;
@@ -147,34 +148,51 @@ class WhatsAppController extends Controller
                                 }
                             }
 
-                            // 🚨 GATILHO: RESERVA PENDENTE (Dinheiro ou Cartão)
+                            // 🚨 GATILHO: RESERVA PENDENTE
                             if (preg_match('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', $aiResponse, $matches)) {
-                                $valorSinal = $matches[1];
+                                $valorSinal = (float) $matches[1];
                                 $dataAg = $matches[2];
-                                $horaAg = $matches[3];
+                                $horaAg = $matches[3]; // Ex: '18:00'
+                                $horaFormatada = $horaAg . ':00';
+
+                                // Remove a tag do texto que vai para o WhatsApp
                                 $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
 
+                                // 🛡️ 1. Identificar o dia da semana para buscar a configuração do gestor
+                                // date('w') retorna: 0 (Domingo) até 6 (Sábado)
+                                $diaSemana = date('w', strtotime($dataAg));
 
-                                $precoPadrao = \Illuminate\Support\Facades\DB::table('arena_configurations')->where('arena_id', 1)->value('default_price') ?? 100.00;
+                                // 🛡️ 2. Buscar o preço real configurado pelo gestor para este horário específico
+                                // OBS: Ajuste 'HorarioConfigurado' para o nome exato do seu Model que guarda a grade do gestor
+                                $configuracaoHorario = \App\Models\HorarioConfigurado::where('dia_semana', $diaSemana)
+                                    ->where('hora_inicio', $horaFormatada)
+                                    ->first();
 
-                                // Checa se já existe reserva para evitar duplicação
-                                $reservaExistente = \App\Models\Reserva::whereDate('date', $dataAg)
-                                    ->where('start_time', $horaAg . ':00')
-                                    ->whereIn('status', ['pending', 'confirmed'])
+                                // Se encontrou a configuração do gestor, pega o preço real. Se por algum motivo falhar, evita o erro fatal definindo 0
+                                $valorReal = $configuracaoHorario ? $configuracaoHorario->preco : 0;
+
+                                // Se o seu sistema também define a hora_fim na configuração, use-a. 
+                                // Caso contrário, mantemos o padrão de 1 hora de duração.
+                                $horaFim = $configuracaoHorario ? $configuracaoHorario->hora_fim : date('H:i:s', strtotime($horaFormatada . ' +1 hour'));
+
+                                // 🛡️ 3. Verifica se a reserva já não existe para evitar duplicidade de slot
+                                $reservaExistente = \App\Models\Reserva::whereDate('data', $dataAg)
+                                    ->where('hora_inicio', $horaFormatada)
+                                    ->whereIn('status', ['pendente_sinal', 'confirmado'])
                                     ->first();
 
                                 if (!$reservaExistente) {
                                     \App\Models\Reserva::create([
-                                        'user_id' => $usuario->id,
-                                        'arena_id' => 1,
-                                        'client_contact' => $phoneContact,
-                                        'date' => $dataAg,
-                                        'start_time' => $horaAg . ':00',
-                                        'end_time' => date('H:i:s', strtotime($horaAg . ' +1 hour')),
-                                        'price' => (float)$precoPadrao,
-                                        'status' => 'pending',
-                                        'payment_status' => 'pending'
+                                        'cliente_id' => $usuario->id,           // Garante a Foreign Key do cliente
+                                        'data' => $dataAg,
+                                        'hora_inicio' => $horaFormatada,
+                                        'hora_fim' => $horaFim,
+                                        'valor_total' => $valorReal,            // <-- Valor real que o gestor definiu!
+                                        'valor_sinal' => $valorSinal,           // Registra o sinal acordado
+                                        'status' => 'pendente_sinal',           // Status que o front-end vai ler
                                     ]);
+
+                                    \Illuminate\Support\Facades\Log::info("Reserva salva via IA. Cliente: {$usuario->nome}, Valor Total: R$ {$valorReal}, Sinal: R$ {$valorSinal}");
                                 }
                             }
 
