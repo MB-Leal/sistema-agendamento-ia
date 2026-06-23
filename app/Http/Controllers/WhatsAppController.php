@@ -223,10 +223,11 @@ class WhatsAppController extends Controller
 
                                     if ($codigoCopiaECola) {
                                         // Formatação amigável
-                                        $aiResponse .= "\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorPix}):*\n\n";
-                                        $aiResponse .= "```{$codigoCopiaECola}
-```\n\n";
-                                        $aiResponse .= "⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._";
+                                        $aiResponse .= "\n\n⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._\n\n🔑 *Abaixo está o seu PIX Copia e Cola* no valor de R$ {$valorPix}\n\n";
+                                        //$aiResponse .= "\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorPix}):*\n\n";
+                                        //$aiResponse .= "```{$codigoCopiaECola}```\n\n";
+                                        //$aiResponse .= "⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._\n\n";
+                                        $aiResponse = $codigoCopiaECola;
 
                                         \App\Models\Reserva::create([
                                             'user_id' => $usuario->id,
