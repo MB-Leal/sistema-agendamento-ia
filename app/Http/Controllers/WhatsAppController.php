@@ -227,7 +227,7 @@ class WhatsAppController extends Controller
                                         //$aiResponse .= "\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorPix}):*\n\n";
                                         //$aiResponse .= "```{$codigoCopiaECola}```\n\n";
                                         //$aiResponse .= "⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._\n\n";
-                                        $aiResponse = $codigoCopiaECola;
+                                        $pixParaEnviarSeparado = $codigoCopiaECola;
 
                                         \App\Models\Reserva::create([
                                             'user_id' => $usuario->id,
@@ -260,6 +260,23 @@ class WhatsAppController extends Controller
                                     ]);
                                 } catch (\Exception $e) {
                                     Log::error("Erro log bot: " . $e->getMessage());
+                                }
+
+                                if (isset($pixParaEnviarSeparado) && !empty($pixParaEnviarSeparado)) {
+                                    
+                                    // Manda só a chave, limpa e solta pro cliente copiar fácil
+                                    $this->whatsAppService->sendMessage($phoneContact, $pixParaEnviarSeparado);
+                                    
+                                    try {
+                                        WhatsAppMessage::create([
+                                            'remote_jid' => $phoneContact . '@s.whatsapp.net',
+                                            'message' => "CHAVE PIX GERADA (Oculta no log por segurança)", // Salvamos assim no log para ficar limpo
+                                            'from_me' => true,
+                                            'timestamp' => now()
+                                        ]);
+                                    } catch (\Exception $e) {
+                                        Log::error("Erro log bot (PIX): " . $e->getMessage());
+                                    }
                                 }
                             }
                         }
