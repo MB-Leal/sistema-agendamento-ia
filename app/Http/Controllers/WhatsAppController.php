@@ -148,7 +148,7 @@ class WhatsAppController extends Controller
                                 }
                             }
 
-                            // 🚨 GATILHO: RESERVA PENDENTE
+                            // 🚨 GATILHO: RESERVA PENDENTE (Dinheiro/Cartão)
                             if (preg_match('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', $aiResponse, $matches)) {
                                 $valorSinal = (float) $matches[1];
                                 $dataAg = $matches[2];
@@ -157,32 +157,38 @@ class WhatsAppController extends Controller
 
                                 $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
 
-                                $diaSemana = date('w', strtotime($dataAg));
+                                // 🛡️ BUSCA INTELIGENTE DO PREÇO CONFIGURADO PELO GESTOR
+                                $diaSemana = date('w', strtotime($dataAg)); // 0 (Dom) a 6 (Sab)
 
-                                $configuracaoHorario = \App\Models\HorarioConfigurado::where('dia_semana', $diaSemana)
-                                    ->where('hora_inicio', $horaFormatada)
+                                $horarioGestor = \Illuminate\Support\Facades\DB::table('schedules')
+                                    ->where('arena_id', 1)
+                                    ->where('day_of_week', $diaSemana)
+                                    ->where('start_time', $horaFormatada)
                                     ->first();
 
-                                $valorReal = $configuracaoHorario ? $configuracaoHorario->preco : 0;
-                                $horaFim = $configuracaoHorario ? $configuracaoHorario->hora_fim : date('H:i:s', strtotime($horaFormatada . ' +1 hour'));
+                                // Se achar o horário configurado, pega o valor real. Se não, usa 100 como segurança.
+                                $precoReal = $horarioGestor ? $horarioGestor->price : 100.00;
+                                $horaFim = $horarioGestor ? $horarioGestor->end_time : date('H:i:s', strtotime($horaFormatada . ' +1 hour'));
 
-                                $reservaExistente = \App\Models\Reserva::whereDate('data', $dataAg)
-                                    ->where('hora_inicio', $horaFormatada)
-                                    ->whereIn('status', ['pendente_sinal', 'confirmado'])
+                                $reservaExistente = \App\Models\Reserva::where('user_id', $usuario->id)
+                                    ->whereDate('date', $dataAg)
+                                    ->where('start_time', $horaFormatada)
+                                    ->whereIn('status', ['pending', 'confirmed'])
                                     ->first();
 
                                 if (!$reservaExistente) {
                                     \App\Models\Reserva::create([
-                                        'cliente_id' => $usuario->id,
-                                        'data' => $dataAg,
-                                        'hora_inicio' => $horaFormatada,
-                                        'hora_fim' => $horaFim,
-                                        'valor_total' => $valorReal,
-                                        'valor_sinal' => $valorSinal,
-                                        'status' => 'pendente_sinal',
+                                        'user_id' => $usuario->id, // Garante que o painel puxe o Nome do Cliente
+                                        'arena_id' => 1,
+                                        'client_contact' => $phoneContact,
+                                        'date' => $dataAg,
+                                        'start_time' => $horaFormatada,
+                                        'end_time' => $horaFim,
+                                        'price' => (float)$precoReal, // <-- O Valor Total real (Resolve o bug do status Cinza)
+                                        // 'advance_payment' => $valorSinal, // ⚠️ ATENÇÃO: Descomente esta linha se a sua tabela de reservas tiver uma coluna para o sinal (ex: advance_payment, sinal_value)
+                                        'status' => 'pending',
+                                        'payment_status' => 'pending'
                                     ]);
-
-                                    \Illuminate\Support\Facades\Log::info("Reserva salva via IA. Cliente: {$usuario->nome}, Valor Total: R$ {$valorReal}, Sinal: R$ {$valorSinal}");
                                 }
                             }
 
@@ -212,9 +218,20 @@ class WhatsAppController extends Controller
                                         // Formatação amigável (Ajuste exato conforme solicitado)
                                         $valorFormatado = number_format((float)$valorPix, 2, ',', '.');
                                         $aiResponse .= "\n\n⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorFormatado}):*\n\n";
-                                        
+
                                         // Salva a chave pura para o envio separado logo abaixo
                                         $pixParaEnviarSeparado = $codigoCopiaECola;
+
+                                        // 🛡️ BUSCA INTELIGENTE DO PREÇO (Para o PIX)
+                                        $diaSemana = date('w', strtotime($dataAgendamento));
+                                        $horarioGestor = \Illuminate\Support\Facades\DB::table('schedules')
+                                            ->where('arena_id', 1)
+                                            ->where('day_of_week', $diaSemana)
+                                            ->where('start_time', $horaAgendamento . ':00')
+                                            ->first();
+
+                                        $precoReal = $horarioGestor ? $horarioGestor->price : 100.00;
+                                        $horaFim = $horarioGestor ? $horarioGestor->end_time : date('H:i:s', strtotime($horaAgendamento . ' +1 hour'));
 
                                         \App\Models\Reserva::create([
                                             'user_id' => $usuario->id,
@@ -222,8 +239,8 @@ class WhatsAppController extends Controller
                                             'client_contact' => $phoneContact,
                                             'date' => $dataAgendamento,
                                             'start_time' => $horaAgendamento . ':00',
-                                            'end_time' => date('H:i:s', strtotime($horaAgendamento . ' +1 hour')),
-                                            'price' => (float)$precoPadrao,
+                                            'end_time' => $horaFim,
+                                            'price' => (float)$precoReal, // <-- O Valor Total real
                                             'status' => 'pending',
                                             'payment_id' => $paymentId,
                                             'payment_status' => 'pending'
@@ -236,7 +253,7 @@ class WhatsAppController extends Controller
 
                             // Envio final
                             if (trim($aiResponse) !== '[HUMANO_ATIVO]' && !empty(trim($aiResponse))) {
-                                
+
                                 // Dispara o texto explicativo primeiro
                                 $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
 
@@ -253,9 +270,9 @@ class WhatsAppController extends Controller
 
                                 // Dispara a chave copia e cola em um balão separado
                                 if (isset($pixParaEnviarSeparado) && !empty($pixParaEnviarSeparado)) {
-                                    
+
                                     $this->whatsAppService->sendMessage($phoneContact, $pixParaEnviarSeparado);
-                                    
+
                                     try {
                                         WhatsAppMessage::create([
                                             'remote_jid' => $phoneContact . '@s.whatsapp.net',
