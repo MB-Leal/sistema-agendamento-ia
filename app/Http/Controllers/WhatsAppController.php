@@ -160,7 +160,7 @@ class WhatsAppController extends Controller
                                 // 🛡️ BUSCA INTELIGENTE DO PREÇO CONFIGURADO PELO GESTOR
                                 $diaSemana = date('w', strtotime($dataAg)); // 0 (Dom) a 6 (Sab)
 
-                                $horarioGestor = \Illuminate\Support\Facades\DB::table('schedules')
+                                $horarioGestor = \Illuminate\Support\Facades\DB::table('horarios')
                                     ->where('arena_id', 1)
                                     ->where('day_of_week', $diaSemana)
                                     ->where('start_time', $horaFormatada)
@@ -224,7 +224,7 @@ class WhatsAppController extends Controller
 
                                         // 🛡️ BUSCA INTELIGENTE DO PREÇO (Para o PIX)
                                         $diaSemana = date('w', strtotime($dataAgendamento));
-                                        $horarioGestor = \Illuminate\Support\Facades\DB::table('schedules')
+                                        $horarioGestor = \Illuminate\Support\Facades\DB::table('horarios')
                                             ->where('arena_id', 1)
                                             ->where('day_of_week', $diaSemana)
                                             ->where('start_time', $horaAgendamento . ':00')
