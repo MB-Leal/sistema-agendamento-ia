@@ -120,7 +120,7 @@ class WhatsAppController extends Controller
                                     ->first();
 
                                 if ($reservaParaCancelar) {
-                                    $reservaParaCancelar->status = 'cancelled'; // Se no seu banco for 'canceled' (com um L), mude aqui!
+                                    $reservaParaCancelar->status = 'cancelled';
                                     $reservaParaCancelar->save();
                                 }
                             }
@@ -152,30 +152,20 @@ class WhatsAppController extends Controller
                             if (preg_match('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', $aiResponse, $matches)) {
                                 $valorSinal = (float) $matches[1];
                                 $dataAg = $matches[2];
-                                $horaAg = $matches[3]; // Ex: '18:00'
+                                $horaAg = $matches[3];
                                 $horaFormatada = $horaAg . ':00';
 
-                                // Remove a tag do texto que vai para o WhatsApp
                                 $aiResponse = preg_replace('/\[RESERVA_PENDENTE:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
 
-                                // 🛡️ 1. Identificar o dia da semana para buscar a configuração do gestor
-                                // date('w') retorna: 0 (Domingo) até 6 (Sábado)
                                 $diaSemana = date('w', strtotime($dataAg));
 
-                                // 🛡️ 2. Buscar o preço real configurado pelo gestor para este horário específico
-                                // OBS: Ajuste 'HorarioConfigurado' para o nome exato do seu Model que guarda a grade do gestor
                                 $configuracaoHorario = \App\Models\HorarioConfigurado::where('dia_semana', $diaSemana)
                                     ->where('hora_inicio', $horaFormatada)
                                     ->first();
 
-                                // Se encontrou a configuração do gestor, pega o preço real. Se por algum motivo falhar, evita o erro fatal definindo 0
                                 $valorReal = $configuracaoHorario ? $configuracaoHorario->preco : 0;
-
-                                // Se o seu sistema também define a hora_fim na configuração, use-a. 
-                                // Caso contrário, mantemos o padrão de 1 hora de duração.
                                 $horaFim = $configuracaoHorario ? $configuracaoHorario->hora_fim : date('H:i:s', strtotime($horaFormatada . ' +1 hour'));
 
-                                // 🛡️ 3. Verifica se a reserva já não existe para evitar duplicidade de slot
                                 $reservaExistente = \App\Models\Reserva::whereDate('data', $dataAg)
                                     ->where('hora_inicio', $horaFormatada)
                                     ->whereIn('status', ['pendente_sinal', 'confirmado'])
@@ -183,13 +173,13 @@ class WhatsAppController extends Controller
 
                                 if (!$reservaExistente) {
                                     \App\Models\Reserva::create([
-                                        'cliente_id' => $usuario->id,           // Garante a Foreign Key do cliente
+                                        'cliente_id' => $usuario->id,
                                         'data' => $dataAg,
                                         'hora_inicio' => $horaFormatada,
                                         'hora_fim' => $horaFim,
-                                        'valor_total' => $valorReal,            // <-- Valor real que o gestor definiu!
-                                        'valor_sinal' => $valorSinal,           // Registra o sinal acordado
-                                        'status' => 'pendente_sinal',           // Status que o front-end vai ler
+                                        'valor_total' => $valorReal,
+                                        'valor_sinal' => $valorSinal,
+                                        'status' => 'pendente_sinal',
                                     ]);
 
                                     \Illuminate\Support\Facades\Log::info("Reserva salva via IA. Cliente: {$usuario->nome}, Valor Total: R$ {$valorReal}, Sinal: R$ {$valorSinal}");
@@ -203,10 +193,8 @@ class WhatsAppController extends Controller
                                 $horaAgendamento = $matches[3];
                                 $aiResponse = preg_replace('/\[GERAR_PIX:([\d\.]+):(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/', '', $aiResponse);
 
-                                // 🛡️ CORREÇÃO: Pega o preço padrão da quadra (Se não achar, usa 100.00 como fallback)
                                 $precoPadrao = \Illuminate\Support\Facades\DB::table('arena_configurations')->where('arena_id', 1)->value('default_price') ?? 100.00;
 
-                                // Checagem Antispam: Se já existe reserva neste horário para este cliente
                                 $reservaExistente = \App\Models\Reserva::where('user_id', $usuario->id)
                                     ->whereDate('date', $dataAgendamento)
                                     ->where('start_time', $horaAgendamento . ':00')
@@ -216,17 +204,16 @@ class WhatsAppController extends Controller
                                 if ($reservaExistente && $reservaExistente->payment_id) {
                                     $aiResponse .= "\n\n⚠️ Você já possui uma reserva aguardando pagamento para este horário. Verifique a chave PIX enviada anteriormente ou fale com um atendente.";
                                 } else {
-                                    // Gera PIX apenas se não existir
                                     $pixData = $this->mercadoPagoService->criarPix($valorPix, "Sinal - Arena Elizeu", $customerName, $phoneContact);
                                     $codigoCopiaECola = $pixData['copia_e_cola'] ?? null;
                                     $paymentId = $pixData['payment_id'] ?? null;
 
                                     if ($codigoCopiaECola) {
-                                        // Formatação amigável
-                                        $aiResponse .= "\n\n⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._\n\n🔑 *Abaixo está o seu PIX Copia e Cola* no valor de R$ {$valorPix}\n\n";
-                                        //$aiResponse .= "\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorPix}):*\n\n";
-                                        //$aiResponse .= "```{$codigoCopiaECola}```\n\n";
-                                        //$aiResponse .= "⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._\n\n";
+                                        // Formatação amigável (Ajuste exato conforme solicitado)
+                                        $valorFormatado = number_format((float)$valorPix, 2, ',', '.');
+                                        $aiResponse .= "\n\n⏳ _Atenção: Este código expira em 30 minutos. Após o pagamento, a confirmação é automática._\n\n🔑 *Aqui está o seu PIX Copia e Cola (Valor: R$ {$valorFormatado}):*\n\n";
+                                        
+                                        // Salva a chave pura para o envio separado logo abaixo
                                         $pixParaEnviarSeparado = $codigoCopiaECola;
 
                                         \App\Models\Reserva::create([
@@ -249,6 +236,8 @@ class WhatsAppController extends Controller
 
                             // Envio final
                             if (trim($aiResponse) !== '[HUMANO_ATIVO]' && !empty(trim($aiResponse))) {
+                                
+                                // Dispara o texto explicativo primeiro
                                 $this->whatsAppService->sendMessage($phoneContact, $aiResponse);
 
                                 try {
@@ -262,15 +251,15 @@ class WhatsAppController extends Controller
                                     Log::error("Erro log bot: " . $e->getMessage());
                                 }
 
+                                // Dispara a chave copia e cola em um balão separado
                                 if (isset($pixParaEnviarSeparado) && !empty($pixParaEnviarSeparado)) {
                                     
-                                    // Manda só a chave, limpa e solta pro cliente copiar fácil
                                     $this->whatsAppService->sendMessage($phoneContact, $pixParaEnviarSeparado);
                                     
                                     try {
                                         WhatsAppMessage::create([
                                             'remote_jid' => $phoneContact . '@s.whatsapp.net',
-                                            'message' => "CHAVE PIX GERADA (Oculta no log por segurança)", // Salvamos assim no log para ficar limpo
+                                            'message' => "CHAVE PIX GERADA (Oculta no log por segurança)",
                                             'from_me' => true,
                                             'timestamp' => now()
                                         ]);
