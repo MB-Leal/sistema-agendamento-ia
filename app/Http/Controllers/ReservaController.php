@@ -1193,6 +1193,8 @@ class ReservaController extends Controller
                 'classNames' => [trim($className)],
                 'extendedProps' => [
                     'status' => $reserva->status,
+                    'client_name' => $reserva->client_name,
+                    'client_contact' => $reserva->client_contact,
                     'price' => (float)$reserva->price,
                     'final_price' => (float)$reserva->final_price,
                     'signal_value' => (float)$reserva->signal_value,

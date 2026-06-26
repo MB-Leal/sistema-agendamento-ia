@@ -180,12 +180,15 @@ class WhatsAppController extends Controller
                                     \App\Models\Reserva::create([
                                         'user_id' => $usuario->id, // Garante que o painel puxe o Nome do Cliente
                                         'arena_id' => 1,
+                                        'client_name' => $usuario->name,
                                         'client_contact' => $phoneContact,
                                         'date' => $dataAg,
                                         'start_time' => $horaFormatada,
                                         'end_time' => $horaFim,
                                         'price' => (float)$precoReal, // <-- O Valor Total real (Resolve o bug do status Cinza)
                                         // 'advance_payment' => $valorSinal, // ⚠️ ATENÇÃO: Descomente esta linha se a sua tabela de reservas tiver uma coluna para o sinal (ex: advance_payment, sinal_value)
+                                        'signal_value' => (float)$valorSinal,
+                                        'total_paid' => 0,
                                         'status' => 'pending',
                                         'payment_status' => 'pending'
                                     ]);
